@@ -5,7 +5,7 @@
 import os
 import time
 
-from flask import Flask, jsonify, render_template, request, redirect
+from flask import Flask, jsonify, render_template, request, redirect, send_from_directory
 
 import shared as _shared
 from shared import (
@@ -38,6 +38,30 @@ from shared import (
 validate_environment()
 
 app = Flask(__name__)
+
+
+@app.context_processor
+def inject_static_asset_version():
+    """Expose file mtimes for cache-busting static assets in templates."""
+    def static_asset_version(filename):
+        try:
+            return int(os.path.getmtime(os.path.join(app.static_folder, filename)))
+        except OSError:
+            return int(APP_START_TIME)
+
+    return {'static_asset_version': static_asset_version}
+
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve the favicon from the root path for browsers that request it directly."""
+    return send_from_directory(
+        app.static_folder,
+        'favicon.ico',
+        mimetype='image/vnd.microsoft.icon',
+        max_age=0,
+    )
+
 
 # REGISTER BLUEPRINTS AFTER APP CREATION TO AVOID CIRCULAR IMPORTS
 from search import search_bp  # noqa: E402
