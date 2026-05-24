@@ -1,0 +1,12 @@
+services:
+  mediadash:
+    image: ghcr.io/thekevinatorx/mediadash:latest
+    container_name: MediaDash
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - "5010:5010"
+    environment:
+      TZ: America/New_York
+    volumes:
+      - ./cache:/data/cache

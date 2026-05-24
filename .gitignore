@@ -1,0 +1,34 @@
+# EDITOR & IDE
+.vscode/
+.idea/
+/Docs
+/cache
+CLAUDE.md
+
+# ENVIRONMENT & SECRETS
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# DEPENDENCIES
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# BUILD OUTPUT
+dist/
+build/
+out/
+
+# LOGS & TEMP
+*.log
+*.tmp
+*.cache
+.DS_Store
+Thumbs.db

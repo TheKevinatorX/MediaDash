@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#08080f">
+    <title>MediaDash</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark');</script>
+</head>
+<body>
+    <div id="app">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    <h1>MediaDash</h1>
+                    <span class="app-version" id="appVersion">v1.0.0</span><span class="version-status-dot" id="versionDot"></span>
+                </div>
+                <span class="server-badge" id="serverBadge"></span>
+            </div>
+            <nav class="main-nav">
+                <a href="#home" class="nav-link" id="nav-home">Home</a>
+                <a href="#search" class="nav-link" id="nav-search">Search</a>
+                <a href="#naming" class="nav-link" id="nav-naming">Naming</a>
+                <a href="#size" class="nav-link" id="nav-size">Sizes</a>
+            </nav>
+            <div class="header-right">
+                <div class="header-actions" id="headerActions">
+                    <div class="sync-btn-group">
+                        <span class="sync-last-pulled" id="syncLastPulled"></span>
+                        <button class="btn btn-ghost" id="refreshAllBtn" title="Sync all libraries from Plex — clears every cache and re-fetches everything.">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                            <span>Sync</span>
+                        </button>
+                    </div>
+                    <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode" aria-label="Toggle theme">
+                        <!-- Moon: show in dark mode -->
+                        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                        <!-- Sun: show in light mode -->
+                        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                        <span class="theme-toggle-label">Toggle Theme</span>
+                    </button>
+                    <a href="#settings" class="settings-nav-icon" id="nav-settings" title="Settings">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                        <span class="settings-nav-label">Settings</span>
+                    </a>
+                    <div class="plex-status" id="plexStatus" title="Plex connection status">
+                        <span class="plex-status-dot" id="healthDot"></span>
+                        <span class="plex-status-text" id="healthLabel">Checking...</span>
+                    </div>
+                </div>
+                <button class="hamburger-btn" id="hamburgerBtn" aria-label="Open menu" aria-expanded="false">
+                    <span class="ham-line"></span>
+                    <span class="ham-line"></span>
+                    <span class="ham-line"></span>
+                </button>
+            </div>
+        </header>
+
+        <!-- HOME PAGE -->
+        <div id="page-home" class="page" style="display:none;">
+            <div class="home-container">
+                <div class="home-loading" id="homeLoading">
+                    <div class="page-loader">
+                        <div class="page-loader-ring page-loader-ring--outer"></div>
+                        <div class="page-loader-ring page-loader-ring--mid"></div>
+                        <div class="page-loader-core"></div>
+                    </div>
+                    <p>Loading media summary...</p>
+                    <p class="state-sub">Analyzing your library in the background&hellip;</p>
+                </div>
+                <div class="home-content" id="homeContent" style="display:none;">
+                    <div class="summary-totals" id="summaryTotals"></div>
+                    <div class="library-grid" id="libraryGrid"></div>
+                </div>
+                <div class="home-error" id="homeError" style="display:none;">
+                    <p id="homeErrorMsg">Failed to load summary.</p>
+                    <button class="btn btn-accent" onclick="HomeDash.reload()">Retry</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SEARCH PAGE -->
+        <div id="page-search" class="page" style="display:none;">
+            <div class="toolbar" id="searchToolbar">
+                <div class="toolbar-left">
+                    <div class="tab-bar" id="searchTabBar"></div>
+                </div>
+                <div class="toolbar-right">
+                    <div class="search-container">
+                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="searchSearch" placeholder="Search title, genre, year..." autocomplete="off">
+                        <button class="search-clear" id="searchSearchClear" style="display:none;" title="Clear">&times;</button>
+                    </div>
+                    <div class="column-picker-wrapper" id="searchColumnPickerWrapper">
+                        <button class="btn btn-secondary" id="searchColumnPickerBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                            </svg>
+                            Columns
+                        </button>
+                        <div class="column-picker" id="searchColumnPicker" style="display:none;"></div>
+                    </div>
+                    <select class="per-page-select" id="qfCriticRating" title="Filter by Critic Rating">
+                        <option value="">Critic Rating</option>
+                        <option value="7">Critic &gt; 7.0</option>
+                        <option value="8">Critic &gt; 8.0</option>
+                        <option value="9">Critic &gt; 9.0</option>
+                    </select>
+                    <select class="per-page-select" id="qfAudienceRating" title="Filter by Audience Rating">
+                        <option value="">Audience Rating</option>
+                        <option value="7">Audience &gt; 7.0</option>
+                        <option value="8">Audience &gt; 8.0</option>
+                        <option value="9">Audience &gt; 9.0</option>
+                    </select>
+                    <select class="per-page-select" id="qfYear" title="Filter by Year">
+                        <option value="">Year</option>
+                        <option value="1999">After 1999</option>
+                        <option value="2009">After 2009</option>
+                        <option value="2014">After 2014</option>
+                        <option value="2019">After 2019</option>
+                    </select>
+                    <select class="per-page-select" id="qfSubtitles" title="Filter by Subtitles">
+                        <option value="">Subtitles</option>
+                        <option value="english">English</option>
+                        <option value="none">None</option>
+                    </select>
+                    <select class="per-page-select" id="searchPerPage">
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </div>
+            </div>
+            <main class="main-content">
+                <div class="state-overlay" id="searchLoading">
+                    <div class="page-loader">
+                        <div class="page-loader-ring page-loader-ring--outer"></div>
+                        <div class="page-loader-ring page-loader-ring--mid"></div>
+                        <div class="page-loader-core"></div>
+                    </div>
+                    <p class="state-text">Connecting to Plex...</p>
+                    <p class="state-sub">Analyzing your library in the background&hellip;</p>
+                </div>
+                <div class="state-overlay" id="searchError" style="display:none;">
+                    <svg class="state-icon error-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    <p class="state-text" id="searchErrorMsg">An error occurred</p>
+                    <button class="btn btn-accent" onclick="SearchDash.retry()">Retry</button>
+                </div>
+                <div class="state-overlay" id="searchEmpty" style="display:none;">
+                    <svg class="state-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                    <p class="state-text" id="searchEmptyMsg">No items found</p>
+                </div>
+                <div class="table-wrapper" id="searchTableWrapper" style="display:none;">
+                    <table class="data-table" id="searchTable">
+                        <thead id="searchTableHead"></thead>
+                        <tbody id="searchTableBody"></tbody>
+                    </table>
+                </div>
+            </main>
+            <footer class="pagination-bar" id="searchPaginationBar" style="display:none;"></footer>
+        </div>
+
+        <!-- NAMING PAGE -->
+        <div id="page-naming" class="page" style="display:none;">
+            <div class="toolbar" id="namingToolbar">
+                <div class="toolbar-left">
+                    <div class="tab-bar" id="namingTabBar"></div>
+                </div>
+                <div class="toolbar-right">
+                    <div class="search-container">
+                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="namingSearch" placeholder="Search title or filename..." autocomplete="off">
+                        <button class="search-clear" id="namingSearchClear" style="display:none;" title="Clear">&times;</button>
+                    </div>
+                    <div class="filter-group" id="namingFilters">
+                        <button class="filter-btn active" data-filter="all" id="namingFilterAll">All</button>
+                        <button class="filter-btn" data-filter="issues" id="namingFilterIssues">Incorrect</button>
+                        <button class="filter-btn" data-filter="ok" id="namingFilterOk">Correct</button>
+                    </div>
+                    <div class="column-picker-wrapper" id="namingColumnPickerWrapper">
+                        <button class="btn btn-secondary" id="namingColumnPickerBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                            </svg>
+                            Columns
+                        </button>
+                        <div class="column-picker" id="namingColumnPicker" style="display:none;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="naming-stats-bar" id="namingStatsBar" style="display:none;"></div>
+            <div class="naming-legend-bar" id="namingLegendBar">
+                <button class="naming-legend-toggle" id="namingLegendToggle" aria-expanded="false" aria-controls="namingLegendContent">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <span class="legend-toggle-label">Naming Convention Reference</span>
+                    <span class="legend-toggle-chevron" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </span>
+                </button>
+                <div class="naming-legend-content" id="namingLegendContent">
+                    <div class="legend-section" id="legendMovies">
+                        <h4 class="legend-type-header"><span class="legend-type-dot"></span>Movies</h4>
+                        <div class="legend-rules">
+                            <div class="legend-rule">
+                                <span class="legend-rule-label">Filename</span>
+                                <span class="legend-example-wrap">
+                                    <svg class="legend-ok-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <code class="legend-example">Movie Title (2024).mkv</code>
+                                </span>
+                                <span class="legend-rule-desc">Must contain the release year in parentheses</span>
+                            </div>
+                            <div class="legend-rule">
+                                <span class="legend-rule-label">Directory</span>
+                                <span class="legend-example-wrap">
+                                    <svg class="legend-ok-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <code class="legend-example">Movie Title (2024)/</code>
+                                </span>
+                                <span class="legend-rule-desc">Containing folder must also include the year</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="legend-section legend-section--shows" id="legendShows">
+                        <h4 class="legend-type-header"><span class="legend-type-dot"></span>TV Shows &amp; Anime</h4>
+                        <div class="legend-rules">
+                            <div class="legend-rule">
+                                <span class="legend-rule-label">Filename</span>
+                                <span class="legend-example-wrap">
+                                    <svg class="legend-ok-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <code class="legend-example" id="legendEpFormat">Show Name (2019) - S01E01 - Episode Title.mkv</code>
+                                </span>
+                                <span class="legend-rule-desc">Must contain an episode code (SxxExx or NxEE per your EPISODE_FORMAT setting)</span>
+                            </div>
+                            <div class="legend-rule">
+                                <span class="legend-rule-label">Season Dir</span>
+                                <span class="legend-example-wrap">
+                                    <svg class="legend-ok-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <code class="legend-example">Season 1</code>
+                                </span>
+                                <span class="legend-rule-desc">Must be exactly "Season N" (case-insensitive)</span>
+                            </div>
+                            <div class="legend-rule">
+                                <span class="legend-rule-label">Show Dir</span>
+                                <span class="legend-example-wrap">
+                                    <svg class="legend-ok-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <code class="legend-example">Show Name (2019)/</code>
+                                </span>
+                                <span class="legend-rule-desc">Must include the show's premiere year in parentheses</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="legend-note">
+                        <svg class="legend-note-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        <span>Year tolerance: ±1 year is accepted. Special characters in titles are replaced with <code> - </code>. Specials (Season 0) are excluded from analysis.</span>
+                    </div>
+                </div>
+            </div>
+            <main class="main-content">
+                <div class="state-overlay" id="namingLoading">
+                    <div class="page-loader">
+                        <div class="page-loader-ring page-loader-ring--outer"></div>
+                        <div class="page-loader-ring page-loader-ring--mid"></div>
+                        <div class="page-loader-core"></div>
+                    </div>
+                    <p class="state-text">Connecting to Plex...</p>
+                    <p class="state-sub">Analyzing all episodes in the background&hellip;</p>
+                </div>
+                <div class="state-overlay" id="namingError" style="display:none;">
+                    <svg class="state-icon error-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    <p class="state-text" id="namingErrorMsg">An error occurred</p>
+                    <button class="btn btn-accent" onclick="NamingDash.retry()">Retry</button>
+                </div>
+                <div class="state-overlay" id="namingEmpty" style="display:none;">
+                    <svg class="state-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                    <p class="state-text" id="namingEmptyMsg">No items found</p>
+                </div>
+                <div class="state-overlay" id="namingAllClear" style="display:none;">
+                    <div class="all-clear-ring">
+                        <svg class="all-clear-check" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <p class="all-clear-heading">All Clear</p>
+                    <p class="all-clear-sub" id="namingAllClearSub">Every item is correctly named</p>
+                </div>
+                <div class="table-wrapper" id="namingTableWrapper" style="display:none;">
+                    <table class="data-table" id="namingTable">
+                        <thead id="namingTableHead"></thead>
+                        <tbody id="namingTableBody"></tbody>
+                    </table>
+                </div>
+            </main>
+            <footer class="pagination-bar" id="namingPaginationBar" style="display:none;"></footer>
+        </div>
+
+        <!-- SIZE PAGE -->
+        <div id="page-size" class="page" style="display:none;">
+            <div class="toolbar" id="sizeToolbar">
+                <div class="toolbar-left">
+                    <div class="tab-bar" id="sizeTabBar"></div>
+                </div>
+                <div class="toolbar-right">
+                    <div class="search-container">
+                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="sizeSearch" placeholder="Search title..." autocomplete="off">
+                        <button class="search-clear" id="sizeSearchClear" style="display:none;" title="Clear">&times;</button>
+                    </div>
+                    <div class="column-picker-wrapper" id="sizeColumnPickerWrapper">
+                        <button class="btn btn-secondary" id="sizeColumnPickerBtn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                            </svg>
+                            Columns
+                        </button>
+                        <div class="column-picker" id="sizeColumnPicker" style="display:none;"></div>
+                    </div>
+                    <select class="per-page-select" id="sizePerPage">
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </div>
+            </div>
+            <div id="sizeEnrichmentBanner" style="display:none;" class="enrichment-banner"></div>
+            <div id="sizeBloatBanner" class="size-bloat-banner">
+                <button class="size-bloat-toggle" id="sizeBloatToggle" aria-expanded="false" aria-controls="sizeBloatContent">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    <span class="size-bloat-label">Showing oversized items only</span>
+                    <span class="size-bloat-chevron" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </span>
+                </button>
+                <div class="size-bloat-content" id="sizeBloatContent">
+                    <div class="bloat-rule">
+                        <span class="bloat-rule-type"><span class="bloat-rule-dot bloat-rule-dot--movie"></span>Movies</span>
+                        <span class="bloat-rule-desc">File is larger than <strong>4 GB</strong> (HD) or <strong>5 GB</strong> (4K) &mdash; a typical ceiling for high-quality encodes at those resolutions</span>
+                    </div>
+                    <div class="bloat-rule">
+                        <span class="bloat-rule-type"><span class="bloat-rule-dot bloat-rule-dot--show"></span>Shows &amp; Seasons</span>
+                        <span class="bloat-rule-desc">Average file size per episode is significantly larger than other shows at the same resolution in your library</span>
+                    </div>
+                </div>
+            </div>
+            <main class="main-content">
+                <div class="state-overlay" id="sizeLoading">
+                    <div class="page-loader">
+                        <div class="page-loader-ring page-loader-ring--outer"></div>
+                        <div class="page-loader-ring page-loader-ring--mid"></div>
+                        <div class="page-loader-core"></div>
+                    </div>
+                    <p class="state-text">Connecting to Plex...</p>
+                    <p class="state-sub">Analyzing your library in the background&hellip;</p>
+                </div>
+                <div class="state-overlay" id="sizeError" style="display:none;">
+                    <svg class="state-icon error-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    <p class="state-text" id="sizeErrorMsg">An error occurred</p>
+                    <button class="btn btn-accent" onclick="SizeDash.retry()">Retry</button>
+                </div>
+                <div class="state-overlay" id="sizeEmpty" style="display:none;">
+                    <svg class="state-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                    <p class="state-text" id="sizeEmptyMsg">No items found</p>
+                </div>
+                <div class="state-overlay" id="sizeAllClear" style="display:none;">
+                    <div class="all-clear-ring">
+                        <svg class="all-clear-check" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <p class="all-clear-heading">Library Looks Lean</p>
+                    <p class="all-clear-sub" id="sizeAllClearSub">No oversized files detected</p>
+                </div>
+
+                <!-- SEASON ANALYSIS PANEL — shown while auto-fetching show libraries -->
+                <div class="season-analysis-overlay" id="sizeSeasonAnalysis" style="display:none;">
+                    <div class="season-analysis-card">
+                        <div class="season-analysis-header">
+                            <div class="season-analysis-icon-wrap">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                </svg>
+                            </div>
+                            <div class="season-analysis-heading">
+                                <div class="season-analysis-title">Building Season Breakdown</div>
+                                <div class="season-analysis-sub">Fetching episode data from your show libraries&hellip;</div>
+                            </div>
+                        </div>
+                        <div class="season-analysis-libs" id="seasonAnalysisLibs"></div>
+                        <div class="season-analysis-footer" id="seasonAnalysisFooter"></div>
+                    </div>
+                </div>
+
+                <div class="table-wrapper" id="sizeTableWrapper" style="display:none;">
+                    <table class="data-table" id="sizeTable">
+                        <thead id="sizeTableHead"></thead>
+                        <tbody id="sizeTableBody"></tbody>
+                    </table>
+                </div>
+            </main>
+            <footer class="pagination-bar" id="sizePaginationBar" style="display:none;"></footer>
+        </div>
+
+        <!-- SETTINGS PAGE -->
+        <div id="page-settings" class="page" style="display:none;">
+            <div class="settings-container">
+                <div class="settings-header">
+                    <h2 class="settings-title">Settings</h2>
+                    <p class="settings-subtitle">Configure your Plex connection. Changes take effect immediately — no need to restart the container.</p>
+                </div>
+
+                <!-- PLEX CONNECTION -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <div class="settings-section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                        </div>
+                        <div>
+                            <div class="settings-section-title">Plex Connection</div>
+                            <div class="settings-section-desc">Your Plex server URL and authentication token</div>
+                        </div>
+                    </div>
+                    <div class="settings-body">
+                        <div class="settings-field">
+                            <label class="settings-label" for="settingsPlexUrl">
+                                Server URL
+                                <span class="settings-label-badge">Required</span>
+                            </label>
+                            <input
+                                type="text"
+                                id="settingsPlexUrl"
+                                class="settings-input"
+                                placeholder="http://192.168.1.100:32400"
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <p class="settings-hint">
+                                The local network address of your Plex server. Usually starts with <code>http://192.168.</code> followed by your server's IP and port <code>:32400</code>.
+                            </p>
+                        </div>
+                        <div class="settings-field">
+                            <label class="settings-label" for="settingsPlexToken">
+                                Plex Token
+                                <span class="settings-label-badge">Required</span>
+                            </label>
+                            <div class="settings-input-wrap">
+                                <input
+                                    type="password"
+                                    id="settingsPlexToken"
+                                    class="settings-input has-toggle"
+                                    placeholder="Leave blank to keep current token"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                                <button class="settings-toggle-visibility" id="settingsTokenToggle" type="button" title="Show/hide token">
+                                    <svg id="tokenEyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                </button>
+                            </div>
+                            <p class="settings-hint">
+                                Your Plex authentication token. To find it: open Plex Web → click any media item → click the ⋮ menu → "Get Info" → "View XML" — the token appears in the URL as <code>X-Plex-Token=...</code>.
+                                <br>Leave blank to keep the existing token unchanged.
+                            </p>
+                        </div>
+                        <div class="settings-actions">
+                            <button class="btn btn-secondary" id="settingsTestBtn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                                Test Connection
+                            </button>
+                            <button class="btn btn-accent" id="settingsSaveBtn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                Save Settings
+                            </button>
+                        </div>
+                        <div id="settingsStatusMsg" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- NAMING RULES -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <div class="settings-section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        </div>
+                        <div>
+                            <div class="settings-section-title">Naming Rules</div>
+                            <div class="settings-section-desc">How MediaDash determines expected filenames and directories. Changes apply immediately — refresh your library to re-check names.</div>
+                        </div>
+                    </div>
+                    <div class="settings-body">
+
+                        <!-- EPISODE FORMAT -->
+                        <div class="settings-field">
+                            <label class="settings-label">Episode Code Format</label>
+                            <div class="settings-radio-group">
+                                <label class="settings-radio-option">
+                                    <input type="radio" name="episodeFormat" value="NxEE" id="epFmtNxEE">
+                                    <span class="settings-radio-label">
+                                        <span class="settings-radio-title">NxEE</span>
+                                        <span class="settings-radio-example">e.g. <code>Show Name (2019) - 1x01 - Episode Title.mkv</code></span>
+                                    </span>
+                                </label>
+                                <label class="settings-radio-option">
+                                    <input type="radio" name="episodeFormat" value="SxxExx" id="epFmtSxxExx">
+                                    <span class="settings-radio-label">
+                                        <span class="settings-radio-title">SxxExx</span>
+                                        <span class="settings-radio-example">e.g. <code>Show Name (2019) - S01E01 - Episode Title.mkv</code></span>
+                                    </span>
+                                </label>
+                            </div>
+                            <p class="settings-hint">Determines the episode numbering style in expected filenames and directories on the Naming page.</p>
+                        </div>
+
+                        <!-- SEASON DIRECTORY ZERO PADDING -->
+                        <div class="settings-field">
+                            <label class="settings-label">Season Directory Format</label>
+                            <div class="settings-radio-group">
+                                <label class="settings-radio-option">
+                                    <input type="radio" name="seasonDirPad" value="0" id="seasonPadOff">
+                                    <span class="settings-radio-label">
+                                        <span class="settings-radio-title">Season N</span>
+                                        <span class="settings-radio-example">e.g. <code>Season 1</code>, <code>Season 12</code></span>
+                                    </span>
+                                </label>
+                                <label class="settings-radio-option">
+                                    <input type="radio" name="seasonDirPad" value="1" id="seasonPadOn">
+                                    <span class="settings-radio-label">
+                                        <span class="settings-radio-title">Season NN</span>
+                                        <span class="settings-radio-example">e.g. <code>Season 01</code>, <code>Season 12</code></span>
+                                    </span>
+                                </label>
+                            </div>
+                            <p class="settings-hint">Whether season directory names are zero-padded. Most Plex setups use <strong>Season N</strong> (no padding).</p>
+                        </div>
+
+                        <!-- YEAR TOLERANCE -->
+                        <div class="settings-field">
+                            <label class="settings-label">Year Tolerance</label>
+                            <div class="settings-radio-group">
+                                <label class="settings-radio-option">
+                                    <input type="radio" name="yearTolerance" value="0" id="yearTol0">
+                                    <span class="settings-radio-label">
+                                        <span class="settings-radio-title">Exact match</span>
+                                        <span class="settings-radio-example">Year in filename must match Plex exactly</span>
+                                    </span>
+                                </label>
+                                <label class="settings-radio-option">
+                                    <input type="radio" name="yearTolerance" value="1" id="yearTol1">
+                                    <span class="settings-radio-label">
+                                        <span class="settings-radio-title">±1 year</span>
+                                        <span class="settings-radio-example">Allows one year off — useful when Plex metadata differs from release year</span>
+                                    </span>
+                                </label>
+                            </div>
+                            <p class="settings-hint">How close the year in a filename must be to the year stored in Plex metadata.</p>
+                        </div>
+
+                        <!-- SPECIAL CHARACTER REPLACEMENT -->
+                        <div class="settings-field">
+                            <label class="settings-label" for="specialCharReplacement">
+                                Special Character Replacement
+                            </label>
+                            <div class="settings-input-group">
+                                <span class="settings-input-pre">Replace <code>[: &lt; &gt; " / \ | ? *]</code> with</span>
+                                <input
+                                    type="text"
+                                    id="specialCharReplacement"
+                                    class="settings-input settings-input-short"
+                                    maxlength="10"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                            </div>
+                            <p class="settings-hint">
+                                Characters that are illegal in Windows/NTFS filenames are replaced with this string when building expected names.
+                                Default is <code> - </code> (space-dash-space). Use an empty string to simply remove them.
+                            </p>
+                        </div>
+
+                        <!-- EXCLUDED SHOWS -->
+                        <div class="settings-field">
+                            <label class="settings-label">Excluded Shows</label>
+                            <div class="excluded-shows-input-row">
+                                <input
+                                    type="text"
+                                    id="excludedShowInput"
+                                    class="settings-input"
+                                    placeholder="Enter exact show title as it appears in Plex…"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                                <button class="btn btn-secondary excluded-show-add-btn" id="excludedShowAddBtn" type="button">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    Add
+                                </button>
+                            </div>
+                            <div class="excluded-shows-tags" id="excludedShowsTags">
+                                <span class="excluded-shows-empty" id="excludedShowsEmpty">No shows excluded — all shows appear in naming results.</span>
+                            </div>
+                            <p class="settings-hint">
+                                Shows added here are hidden from naming check results. Use the exact title as it appears in Plex. Useful for shows you intentionally store with non-standard naming (e.g. anime with custom filenames).
+                            </p>
+                        </div>
+
+                        <!-- NAMING FORMAT REFERENCE (read-only) -->
+                        <div class="settings-field">
+                            <label class="settings-label">Expected Name Patterns</label>
+                            <div class="settings-format-grid">
+                                <div class="settings-format-row">
+                                    <span class="settings-format-label">Movie file</span>
+                                    <code class="settings-format-value">Title (Year).ext</code>
+                                </div>
+                                <div class="settings-format-row">
+                                    <span class="settings-format-label">Movie directory</span>
+                                    <code class="settings-format-value">Title (Year)</code>
+                                </div>
+                                <div class="settings-format-row">
+                                    <span class="settings-format-label">Episode file</span>
+                                    <code class="settings-format-value" id="epFormatPreview">Show (Year) - 1x01 - Episode Title.ext</code>
+                                </div>
+                                <div class="settings-format-row">
+                                    <span class="settings-format-label">Show directory</span>
+                                    <code class="settings-format-value">Show Name (Year)</code>
+                                </div>
+                                <div class="settings-format-row">
+                                    <span class="settings-format-label">Season directory</span>
+                                    <code class="settings-format-value" id="seasonDirPreview">Season 1</code>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="settings-actions">
+                            <button class="btn btn-accent" id="namingRulesSaveBtn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                Save Naming Rules
+                            </button>
+                        </div>
+                        <div id="namingRulesStatusMsg" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- INTEGRATIONS -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <div class="settings-section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M6.4 6.4l1.4 1.4M16.2 16.2l1.4 1.4M6.4 17.6l1.4-1.4M16.2 7.8l1.4-1.4"></path><circle cx="12" cy="12" r="9"></circle></svg>
+                        </div>
+                        <div>
+                            <div class="settings-section-title">Integrations</div>
+                            <div class="settings-section-desc">Third-party API keys used to enrich your library data</div>
+                        </div>
+                    </div>
+                    <div class="settings-body">
+                        <div class="settings-field">
+                            <label class="settings-label" for="settingsTmdbKey">
+                                TMDB API Key
+                                <span class="settings-label-badge settings-label-badge--optional">Optional</span>
+                            </label>
+                            <div class="settings-input-wrap">
+                                <input
+                                    type="password"
+                                    id="settingsTmdbKey"
+                                    class="settings-input has-toggle"
+                                    placeholder="Leave blank to keep current key"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                >
+                                <button class="settings-toggle-visibility" id="tmdbKeyToggle" type="button" title="Show/hide API key">
+                                    <svg id="tmdbKeyEyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                </button>
+                            </div>
+                            <p class="settings-hint">
+                                Used to display show status (Continuing, Ended, etc.) on the Browse page.
+                                Get a free key at <strong>themoviedb.org</strong> → Settings → API.
+                                Leave blank to keep the current key unchanged; your key is never shown in full.
+                            </p>
+                        </div>
+                        <div class="settings-actions">
+                            <button class="btn btn-accent" id="integrationsSaveBtn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                Save Integrations
+                            </button>
+                        </div>
+                        <div id="integrationsStatusMsg" style="display:none;"></div>
+                    </div>
+                </div>
+
+                <!-- ABOUT -->
+                <div class="settings-section">
+                    <div class="settings-section-header">
+                        <div class="settings-section-icon">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        </div>
+                        <div>
+                            <div class="settings-section-title">About MediaDash</div>
+                            <div class="settings-section-desc">Version information and project links</div>
+                        </div>
+                    </div>
+                    <div class="settings-body">
+                        <div class="settings-about-row">
+                            <span class="settings-about-label">Installed version</span>
+                            <span class="settings-about-value" id="settingsVersion">—</span>
+                        </div>
+                        <div class="settings-about-row">
+                            <span class="settings-about-label">Config source</span>
+                            <span class="settings-about-value" id="settingsSource">—</span>
+                        </div>
+                        <div class="settings-about-row">
+                            <span class="settings-about-label">GitHub</span>
+                            <span class="settings-about-value">
+                                <a href="https://github.com/BourbonDusk/MediaDash" target="_blank" rel="noopener">
+                                    View on GitHub
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                </a>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MOBILE DETAIL PANEL (BOTTOM SHEET) -->
+        <div class="mobile-detail-panel" id="mobileDetailPanel">
+            <div class="mobile-panel-backdrop" id="mobilePanelBackdrop"></div>
+            <div class="mobile-panel-sheet" id="mobilePanelSheet">
+                <div class="mobile-panel-handle"><div class="mobile-panel-handle-bar"></div></div>
+                <div class="mobile-panel-header">
+                    <div class="mobile-panel-header-info">
+                        <div class="mobile-panel-title" id="mobilePanelTitle"></div>
+                        <div class="mobile-panel-meta" id="mobilePanelMeta"></div>
+                    </div>
+                    <button class="mobile-panel-close" id="mobilePanelClose" aria-label="Close">&times;</button>
+                </div>
+                <div class="mobile-panel-body" id="mobilePanelBody"></div>
+            </div>
+        </div>
+
+        <!-- SYNC BANNER — COMPACT TOP INDICATOR WHILE SYNC IS RUNNING -->
+        <div id="syncOverlay" class="sync-overlay" aria-live="assertive" aria-label="Syncing libraries">
+            <div class="sync-visual">
+                <div class="sync-rings">
+                    <div class="sync-glow"></div>
+                    <div class="sync-ring sync-ring--outer"></div>
+                    <div class="sync-ring sync-ring--mid"></div>
+                    <div class="sync-ring sync-ring--inner"></div>
+                    <div class="sync-core"></div>
+                </div>
+                <div class="sync-bars" aria-hidden="true">
+                    <span class="sync-bar"></span>
+                    <span class="sync-bar"></span>
+                    <span class="sync-bar"></span>
+                    <span class="sync-bar"></span>
+                    <span class="sync-bar"></span>
+                    <span class="sync-bar"></span>
+                    <span class="sync-bar"></span>
+                </div>
+            </div>
+            <div class="sync-text">
+                <p class="sync-title">Syncing Libraries</p>
+                <p class="sync-sub">Large libraries may take 30–120 seconds — watch the progress panel below</p>
+            </div>
+        </div>
+
+        <!-- PROGRESS HUB — GLOBAL BACKGROUND ANALYSIS INDICATOR -->
+        <div id="progressHub" class="phub" role="status" aria-live="polite" aria-label="Background analysis status">
+            <div class="phub-header" id="phubHeader">
+                <div class="phub-header-left">
+                    <div class="phub-indicator">
+                        <div class="phub-pulse-ring"></div>
+                        <div class="phub-dot"></div>
+                    </div>
+                    <span class="phub-title" id="phubTitle">Analyzing Library</span>
+                </div>
+                <div class="phub-header-right">
+                    <span class="phub-badge" id="phubBadge">0</span>
+                    <button type="button" class="phub-close" id="phubClose" aria-label="Dismiss progress panel">&#x2715;</button>
+                    <button class="phub-toggle" id="phubToggle" aria-label="Collapse progress panel">
+                        <svg class="phub-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="18 15 12 9 6 15"></polyline>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="phub-body" id="phubBody">
+                <div class="phub-tasks" id="phubTasks"></div>
+            </div>
+            <div class="phub-completed-panel" id="phubCompletedPanel">
+                <div class="phub-completed-header">
+                    <span class="phub-completed-label">Completed</span>
+                    <span class="phub-completed-count" id="phubCompletedCount">0</span>
+                </div>
+                <div class="phub-completed-list" id="phubCompletedList"></div>
+            </div>
+            <div class="phub-footer" id="phubFooter">
+                <span class="phub-footer-text" id="phubFooterText"></span>
+                <span class="phub-footer-live">
+                    <span class="phub-live-dot"></span>
+                    <span class="phub-live-label">live</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- TOAST CONTAINER -->
+        <div class="toast-container" id="toastContainer"></div>
+
+        <!-- MOBILE BOTTOM NAVIGATION (≤640px) -->
+        <nav class="bottom-nav" id="bottomNav" aria-label="Page navigation">
+            <a href="#home" class="bottom-nav-item" id="bnav-home">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                <span>Home</span>
+            </a>
+            <a href="#search" class="bottom-nav-item" id="bnav-search">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Search</span>
+            </a>
+            <a href="#naming" class="bottom-nav-item" id="bnav-naming">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <span>Naming</span>
+            </a>
+            <a href="#size" class="bottom-nav-item" id="bnav-size">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                <span>Sizes</span>
+            </a>
+            <a href="#settings" class="bottom-nav-item" id="bnav-settings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                <span>Settings</span>
+            </a>
+        </nav>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/home.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/naming.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/size.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

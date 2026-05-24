@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#060611">
+    <title>MediaDash — Setup</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:            #060611;
+            --surface:       #0b0b1c;
+            --surface-2:     #101025;
+            --border:        rgba(255,255,255,0.055);
+            --border-hi:     rgba(255,255,255,0.10);
+            --accent:        #dc2626;
+            --accent-dim:    rgba(220,38,38,0.18);
+            --accent-glow:   rgba(220,38,38,0.28);
+            --accent-subtle: rgba(220,38,38,0.07);
+            --text:          #e9e9f4;
+            --text-muted:    #6a6a86;
+            --text-dim:      #9090aa;
+            --success:       #22c55e;
+            --success-glow:  rgba(34,197,94,0.22);
+            --error:         #ef4444;
+            --font-display:  'Orbitron', monospace;
+            --font-body:     'Outfit', sans-serif;
+            --radius:        14px;
+            --radius-sm:     8px;
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-body);
+            font-size: 15px;
+            line-height: 1.6;
+            overflow: hidden;
+        }
+
+        /* Film grain */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            opacity: 0.028;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Ambient dot grid */
+        .page-bg {
+            position: fixed;
+            inset: 0;
+            background-image:
+                radial-gradient(ellipse 70% 60% at 15% 40%, rgba(220,38,38,0.055) 0%, transparent 65%),
+                radial-gradient(ellipse 50% 50% at 85% 70%, rgba(220,38,38,0.03) 0%, transparent 65%),
+                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+            background-size: 100% 100%, 100% 100%, 28px 28px;
+            pointer-events: none;
+        }
+
+        /* Root layout */
+        .setup-root {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 28px 20px;
+            position: relative;
+        }
+
+        /* Card */
+        .setup-card {
+            position: relative;
+            width: 100%;
+            max-width: 980px;
+            display: flex;
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            overflow: hidden;
+            box-shadow:
+                0 0 0 1px rgba(255,255,255,0.02),
+                0 48px 120px rgba(0,0,0,0.65),
+                0 0 60px rgba(220,38,38,0.04);
+            animation: cardIn 0.75s cubic-bezier(0.16,1,0.3,1) both;
+        }
+
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(22px) scale(0.97); }
+            to   { opacity: 1; transform: none; }
+        }
+
+        /* ━━━━━━━━━━━━━━━━━━━━━━━━ HERO PANEL ━━━━━━━━━━━━━━━━━━━━━━━━ */
+        .hero {
+            flex: 0 0 38%;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 52px 36px;
+            background: linear-gradient(150deg, #0d0d22 0%, #0a0814 55%, #0c0909 100%);
+            border-right: 1px solid var(--border);
+        }
+
+        /* Scanlines */
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 3px,
+                rgba(0,0,0,0.12) 3px,
+                rgba(0,0,0,0.12) 4px
+            );
+            pointer-events: none;
+        }
+
+        /* Left accent line */
+        .hero::after {
+            content: '';
+            position: absolute;
+            left: 0; top: 25%; bottom: 25%;
+            width: 2px;
+            background: linear-gradient(to bottom, transparent, rgba(220,38,38,0.7), transparent);
+        }
+
+        /* Radar rings */
+        .rings {
+            position: absolute;
+            inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: none;
+        }
+
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid rgba(220,38,38,0.07);
+        }
+
+        .ring:nth-child(1) { width: 160px; height: 160px; animation: rp 4s ease-in-out infinite 0.0s; }
+        .ring:nth-child(2) { width: 260px; height: 260px; animation: rp 4s ease-in-out infinite 0.6s; }
+        .ring:nth-child(3) { width: 380px; height: 380px; animation: rp 4s ease-in-out infinite 1.2s; }
+        .ring:nth-child(4) { width: 520px; height: 520px; animation: rp 4s ease-in-out infinite 1.8s; }
+        .ring:nth-child(5) { width: 680px; height: 680px; animation: rp 4s ease-in-out infinite 2.4s; }
+
+        @keyframes rp {
+            0%,100% { opacity: 0.4; }
+            50%      { opacity: 0.10; }
+        }
+
+        /* Hero content */
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            width: 100%;
+        }
+
+        .hero-icon {
+            width: 76px; height: 76px;
+            border-radius: 50%;
+            border: 2px solid rgba(220,38,38,0.38);
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 28px;
+            background: rgba(220,38,38,0.07);
+            box-shadow: 0 0 48px rgba(220,38,38,0.18), inset 0 0 24px rgba(220,38,38,0.06);
+            animation: iconPulse 3.5s ease-in-out infinite;
+            position: relative;
+        }
+        .hero-icon::before {
+            content: '';
+            position: absolute;
+            inset: -7px;
+            border-radius: 50%;
+            border: 1px solid rgba(220,38,38,0.13);
+        }
+        .hero-icon::after {
+            content: '';
+            position: absolute;
+            inset: -14px;
+            border-radius: 50%;
+            border: 1px solid rgba(220,38,38,0.06);
+        }
+
+        @keyframes iconPulse {
+            0%,100% { box-shadow: 0 0 48px rgba(220,38,38,0.18), inset 0 0 24px rgba(220,38,38,0.06); }
+            50%      { box-shadow: 0 0 70px rgba(220,38,38,0.30), inset 0 0 36px rgba(220,38,38,0.10); }
+        }
+
+        .hero-logo {
+            font-family: var(--font-display);
+            font-size: 19px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .hero-sub {
+            font-size: 10px;
+            font-weight: 400;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+        }
+
+        /* Film strip dots that react to step */
+        .film-strip {
+            display: flex;
+            gap: 7px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .film-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 2px;
+            background: rgba(255,255,255,0.1);
+            transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+        }
+
+        .film-dot.lit {
+            background: var(--accent);
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        /* Signal indicator */
+        .hero-signal {
+            position: absolute;
+            bottom: 28px;
+            left: 0; right: 0;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+        }
+
+        .sig-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: sigBlink 1.6s ease-in-out infinite;
+        }
+
+        @keyframes sigBlink {
+            0%,100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
+            50%      { opacity: 0.2; box-shadow: none; }
+        }
+
+        .sig-text {
+            font-family: var(--font-display);
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.28em;
+            color: var(--text-muted);
+        }
+
+        /* ━━━━━━━━━━━━━━━━━━━━━━━━ FORM PANEL ━━━━━━━━━━━━━━━━━━━━━━━━ */
+        .form-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 48px 52px 44px;
+            overflow-y: auto;
+            min-height: 580px;
+        }
+
+        /* Step tracker */
+        .step-track {
+            display: flex;
+            align-items: flex-start;
+            gap: 0;
+            margin-bottom: 48px;
+        }
+
+        .step-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .step-circle {
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.09);
+            display: flex; align-items: center; justify-content: center;
+            font-family: var(--font-display);
+            font-size: 9px; font-weight: 700;
+            color: var(--text-muted);
+            transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        .step-circle.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            box-shadow: 0 0 18px rgba(220,38,38,0.35);
+        }
+        .step-circle.done {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .step-lbl {
+            font-size: 10px; font-weight: 500;
+            letter-spacing: 0.04em;
+            color: var(--text-muted);
+            white-space: nowrap;
+            transition: color 0.3s;
+        }
+        .step-node.active .step-lbl { color: var(--text); }
+
+        .step-line {
+            flex: 1;
+            height: 1px;
+            background: rgba(255,255,255,0.06);
+            margin: 15px 6px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .step-line::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--accent);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.5s ease;
+        }
+        .step-line.done::after { transform: scaleX(1); }
+
+        /* Step panels */
+        .step-panel {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+        }
+        .step-panel.active {
+            display: flex;
+            animation: stepIn 0.38s cubic-bezier(0.16,1,0.3,1);
+        }
+
+        @keyframes stepIn {
+            from { opacity: 0; transform: translateX(14px); }
+            to   { opacity: 1; transform: none; }
+        }
+
+        /* Step typography */
+        .eyebrow {
+            font-family: var(--font-display);
+            font-size: 9px; font-weight: 700;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 9px;
+        }
+
+        .step-h {
+            font-size: 27px; font-weight: 600;
+            color: var(--text);
+            line-height: 1.18;
+            margin-bottom: 7px;
+        }
+
+        .step-desc {
+            font-size: 14px; font-weight: 400;
+            color: var(--text-muted);
+            line-height: 1.65;
+            margin-bottom: 28px;
+        }
+
+        /* Form fields */
+        .field { margin-bottom: 22px; }
+
+        .field-lbl {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; font-weight: 500;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            letter-spacing: 0.025em;
+        }
+
+        .req-badge {
+            font-size: 9px; font-weight: 700;
+            letter-spacing: 0.08em; text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--accent-subtle);
+            color: var(--accent);
+            border: 1px solid rgba(220,38,38,0.22);
+        }
+
+        .input-wrap { position: relative; }
+
+        input[type="text"], input[type="password"] {
+            display: block;
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(255,255,255,0.028);
+            border: 1px solid rgba(255,255,255,0.075);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-family: var(--font-body);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.22s, box-shadow 0.22s, background 0.22s;
+            -webkit-appearance: none;
+        }
+
+        input:focus {
+            border-color: rgba(220,38,38,0.48);
+            background: rgba(220,38,38,0.028);
+            box-shadow: 0 0 0 3px rgba(220,38,38,0.10);
+        }
+
+        input.with-toggle { padding-right: 46px; }
+
+        .toggle-vis {
+            position: absolute;
+            right: 11px; top: 50%;
+            transform: translateY(-50%);
+            background: none; border: none;
+            color: var(--text-muted); cursor: pointer;
+            padding: 4px;
+            display: flex; align-items: center;
+            transition: color 0.2s;
+        }
+        .toggle-vis:hover { color: var(--text); }
+
+        .field-hint {
+            font-size: 12px; color: var(--text-muted);
+            margin-top: 6px; line-height: 1.55;
+        }
+        .field-hint code {
+            font-family: var(--font-display);
+            font-size: 9px;
+            background: rgba(255,255,255,0.06);
+            padding: 1px 6px; border-radius: 3px;
+            color: var(--text-dim);
+        }
+
+        /* Radio options */
+        .radio-row {
+            display: flex; gap: 10px;
+            margin-bottom: 10px;
+        }
+        .radio-row:last-child { margin-bottom: 0; }
+
+        .radio-opt { flex: 1; position: relative; }
+
+        .radio-opt input {
+            position: absolute; opacity: 0; width: 0; height: 0;
+        }
+
+        .radio-lbl {
+            display: flex; align-items: center; gap: 11px;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            background: rgba(255,255,255,0.018);
+            transition: all 0.2s;
+        }
+        .radio-lbl:hover {
+            border-color: rgba(255,255,255,0.12);
+            background: rgba(255,255,255,0.03);
+        }
+        .radio-opt input:checked + .radio-lbl {
+            border-color: rgba(220,38,38,0.42);
+            background: rgba(220,38,38,0.065);
+        }
+
+        .radio-pip {
+            width: 15px; height: 15px; min-width: 15px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.18);
+            display: flex; align-items: center; justify-content: center;
+            transition: border-color 0.2s;
+            flex-shrink: 0;
+        }
+        .radio-opt input:checked + .radio-lbl .radio-pip {
+            border-color: var(--accent);
+        }
+        .radio-opt input:checked + .radio-lbl .radio-pip::after {
+            content: '';
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .radio-text { display: flex; flex-direction: column; }
+        .radio-title { font-size: 13px; font-weight: 500; color: var(--text); }
+        .radio-sub   { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+        /* Short input + inline label */
+        .input-inline {
+            display: flex; align-items: center; gap: 11px;
+        }
+        .input-pre {
+            font-size: 13px; color: var(--text-muted); white-space: nowrap;
+        }
+        .input-short { width: 110px !important; }
+
+        /* Status bar */
+        .status {
+            display: none;
+            align-items: center; gap: 10px;
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            margin-top: 14px;
+            font-size: 13px;
+            border: 1px solid;
+        }
+        .status.ok    { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.22); color: var(--success); }
+        .status.error { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.22); color: var(--error); }
+        .status.busy  { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); color: var(--text-muted); }
+
+        /* Spinner */
+        .spin {
+            width: 13px; height: 13px; flex-shrink: 0;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spinAnim 0.65s linear infinite;
+        }
+        @keyframes spinAnim { to { transform: rotate(360deg); } }
+
+        /* Buttons */
+        .actions {
+            display: flex; gap: 10px;
+            margin-top: auto; padding-top: 28px;
+        }
+
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 11px 22px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-body);
+            font-size: 14px; font-weight: 500;
+            cursor: pointer;
+            border: 1px solid transparent;
+            outline: none;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-primary {
+            background: var(--accent); color: #fff;
+            border-color: var(--accent);
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #c51f1f;
+            box-shadow: 0 0 24px rgba(220,38,38,0.42);
+        }
+        .btn-ghost {
+            background: transparent; color: var(--text-muted);
+            border-color: rgba(255,255,255,0.08);
+        }
+        .btn-ghost:hover:not(:disabled) {
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            border-color: var(--border-hi);
+        }
+        .btn:disabled { opacity: 0.38; cursor: not-allowed; }
+        .btn-grow { flex: 1; justify-content: center; }
+        .btn-full { width: 100%; justify-content: center; }
+
+        /* Connection required hint */
+        .conn-hint {
+            display: flex; align-items: center; gap: 7px;
+            margin-top: 10px;
+            font-size: 12px; color: var(--text-muted);
+            transition: opacity 0.3s;
+        }
+        .conn-hint svg { flex-shrink: 0; opacity: 0.5; }
+        .conn-hint.hidden { opacity: 0; pointer-events: none; }
+
+        /* Welcome step features */
+        .features {
+            display: flex; flex-direction: column; gap: 13px;
+            margin: 6px 0 30px;
+        }
+        .feature {
+            display: flex; align-items: center; gap: 12px;
+            font-size: 14px; color: var(--text-dim);
+        }
+        .feat-dot {
+            width: 6px; height: 6px; min-width: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 8px rgba(220,38,38,0.55);
+        }
+
+        /* Success step */
+        .success-ring {
+            width: 66px; height: 66px;
+            border-radius: 50%;
+            border: 2px solid var(--success);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--success);
+            margin-bottom: 22px;
+            box-shadow: 0 0 44px var(--success-glow);
+            animation: succPop 0.55s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        @keyframes succPop {
+            from { transform: scale(0.4); opacity: 0; }
+            to   { transform: scale(1); opacity: 1; }
+        }
+
+        .success-server {
+            font-family: var(--font-display);
+            font-size: 13px; letter-spacing: 0.1em;
+            color: var(--success);
+            margin-bottom: 10px;
+        }
+
+        /* Mobile */
+        @media (max-width: 720px) {
+            html, body { overflow: auto; }
+            .setup-root { padding: 16px; align-items: flex-start; }
+            .setup-card { flex-direction: column; }
+            .hero {
+                flex: none; min-height: 210px;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                padding: 36px 28px;
+            }
+            .ring:nth-child(4), .ring:nth-child(5) { display: none; }
+            .form-panel { padding: 32px 24px 36px; min-height: unset; }
+            .step-lbl { display: none; }
+            .step-h { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+<div class="page-bg"></div>
+<div class="setup-root">
+    <div class="setup-card">
+
+        <!-- ── HERO PANEL ─────────────────────────────── -->
+        <div class="hero">
+            <div class="rings">
+                <div class="ring"></div>
+                <div class="ring"></div>
+                <div class="ring"></div>
+                <div class="ring"></div>
+                <div class="ring"></div>
+            </div>
+
+            <div class="hero-content">
+                <div class="hero-icon">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="#dc2626">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                </div>
+                <div class="hero-logo">MEDIADASH</div>
+                <div class="hero-sub">YOUR MEDIA. YOUR COMMAND.</div>
+                <div class="film-strip">
+                    <div class="film-dot" id="fd0"></div>
+                    <div class="film-dot" id="fd1"></div>
+                    <div class="film-dot" id="fd2"></div>
+                    <div class="film-dot" id="fd3"></div>
+                    <div class="film-dot" id="fd4"></div>
+                </div>
+            </div>
+
+            <div class="hero-signal">
+                <div class="sig-dot"></div>
+                <div class="sig-text" id="sigText">AWAITING SIGNAL</div>
+            </div>
+        </div>
+
+        <!-- ── FORM PANEL ─────────────────────────────── -->
+        <div class="form-panel">
+
+            <!-- Step progress track -->
+            <div class="step-track">
+                <div class="step-node active" id="sn0">
+                    <div class="step-circle active" id="sc0">01</div>
+                    <div class="step-lbl">Welcome</div>
+                </div>
+                <div class="step-line" id="sl0"></div>
+                <div class="step-node" id="sn1">
+                    <div class="step-circle" id="sc1">02</div>
+                    <div class="step-lbl">Connect</div>
+                </div>
+                <div class="step-line" id="sl1"></div>
+                <div class="step-node" id="sn2">
+                    <div class="step-circle" id="sc2">03</div>
+                    <div class="step-lbl">Libraries</div>
+                </div>
+                <div class="step-line" id="sl2"></div>
+                <div class="step-node" id="sn3">
+                    <div class="step-circle" id="sc3">04</div>
+                    <div class="step-lbl">Configure</div>
+                </div>
+                <div class="step-line" id="sl3"></div>
+                <div class="step-node" id="sn4">
+                    <div class="step-circle" id="sc4">05</div>
+                    <div class="step-lbl">Launch</div>
+                </div>
+            </div>
+
+            <!-- ── Step 0: Welcome ────────────────────── -->
+            <div class="step-panel active" id="sp0">
+                <div class="eyebrow">Initialization</div>
+                <div class="step-h">Welcome to<br>MediaDash</div>
+                <div class="step-desc">
+                    A self-hosted Plex dashboard for your home media server.
+                    Takes about 2 minutes to set up.
+                </div>
+                <div class="features">
+                    <div class="feature"><div class="feat-dot"></div>Library overview with total size and watch-time stats</div>
+                    <div class="feature"><div class="feat-dot"></div>Filename convention checker for movies and TV shows</div>
+                    <div class="feature"><div class="feat-dot"></div>Oversized file detection and bloat analysis</div>
+                    <div class="feature"><div class="feat-dot"></div>Full-library search and column filtering</div>
+                </div>
+                <div class="step-desc" style="margin-bottom:0">
+                    You'll need your Plex server URL (usually <code style="font-family:var(--font-display);font-size:10px;background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;color:var(--text-dim)">http://192.168.x.x:32400</code>)
+                    and your Plex authentication token.
+                </div>
+                <div class="actions">
+                    <button class="btn btn-primary btn-full" onclick="goTo(1)">
+                        Get Started
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Step 1: Connect ────────────────────── -->
+            <div class="step-panel" id="sp1">
+                <div class="eyebrow">Step 01 of 03</div>
+                <div class="step-h">Connect to Plex</div>
+                <div class="step-desc">Enter your Plex server details. Both fields are required.</div>
+
+                <div class="field">
+                    <div class="field-lbl">Server URL <span class="req-badge">Required</span></div>
+                    <input type="text" id="plexUrl" placeholder="http://192.168.1.100:32400" autocomplete="off" spellcheck="false">
+                    <div class="field-hint">
+                        Your Plex server's local address. Usually starts with <code>http://192.168.</code> followed by your server's IP and port <code>:32400</code>.
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-lbl">Plex Token <span class="req-badge">Required</span></div>
+                    <div class="input-wrap">
+                        <input type="password" id="plexToken" class="with-toggle" placeholder="Your X-Plex-Token" autocomplete="off" spellcheck="false">
+                        <button class="toggle-vis" id="tokenToggle" type="button" title="Show / hide token">
+                            <svg id="eyeIco" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="field-hint">
+                        Find it in Plex Web: click any media item → ⋯ menu → Get Info → View XML.
+                        Look for <code>X-Plex-Token=</code> in the URL.
+                    </div>
+                </div>
+
+                <div class="status" id="connStatus"></div>
+
+                <div class="actions">
+                    <button class="btn btn-ghost" onclick="goTo(0)">Back</button>
+                    <button class="btn btn-ghost" id="testBtn" onclick="testConn()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+                        </svg>
+                        Test Connection
+                    </button>
+                    <button class="btn btn-primary btn-grow" id="connNextBtn" onclick="goTo(2)" disabled>
+                        Continue
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div class="conn-hint" id="connHint">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    A successful connection test is required before you can continue.
+                </div>
+            </div>
+
+            <!-- ── Step 2: Libraries ─────────────────────────────── -->
+            <div class="step-panel" id="sp2">
+                <div class="eyebrow">Step 02 of 03</div>
+                <div class="step-h">Choose Libraries</div>
+                <div class="step-desc">Select which Plex libraries MediaDash should track. Only Movie and TV Show libraries are supported.</div>
+                <div id="libCards" style="display:flex;flex-direction:column;gap:10px;margin-bottom:22px;"></div>
+                <div class="status" id="libStatus"></div>
+                <div class="actions">
+                    <button class="btn btn-ghost" onclick="goTo(1)">Back</button>
+                    <button class="btn btn-primary btn-grow" id="libNextBtn" onclick="goTo(3)">
+                        Continue
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Step 3: Configure ──────────────────── -->
+            <div class="step-panel" id="sp3">
+                <div class="eyebrow">Step 03 of 03</div>
+                <div class="step-h">Naming Preferences</div>
+                <div class="step-desc">How MediaDash checks your filenames. All defaults are fine — you can change these later in Settings.</div>
+
+                <div class="field">
+                    <div class="field-lbl">Episode Code Format</div>
+                    <div class="radio-row">
+                        <div class="radio-opt">
+                            <input type="radio" name="epFmt" id="epNxEE" value="NxEE" checked>
+                            <label class="radio-lbl" for="epNxEE">
+                                <div class="radio-pip"></div>
+                                <div class="radio-text">
+                                    <div class="radio-title">NxEE</div>
+                                    <div class="radio-sub">e.g. 1x01</div>
+                                </div>
+                            </label>
+                        </div>
+                        <div class="radio-opt">
+                            <input type="radio" name="epFmt" id="epSxxExx" value="SxxExx">
+                            <label class="radio-lbl" for="epSxxExx">
+                                <div class="radio-pip"></div>
+                                <div class="radio-text">
+                                    <div class="radio-title">SxxExx</div>
+                                    <div class="radio-sub">e.g. S01E01</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-lbl">Season Directory Format</div>
+                    <div class="radio-row">
+                        <div class="radio-opt">
+                            <input type="radio" name="seasonPad" id="padOff" value="0" checked>
+                            <label class="radio-lbl" for="padOff">
+                                <div class="radio-pip"></div>
+                                <div class="radio-text">
+                                    <div class="radio-title">Season N</div>
+                                    <div class="radio-sub">e.g. Season 1</div>
+                                </div>
+                            </label>
+                        </div>
+                        <div class="radio-opt">
+                            <input type="radio" name="seasonPad" id="padOn" value="1">
+                            <label class="radio-lbl" for="padOn">
+                                <div class="radio-pip"></div>
+                                <div class="radio-text">
+                                    <div class="radio-title">Season NN</div>
+                                    <div class="radio-sub">e.g. Season 01</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-lbl">Year Tolerance</div>
+                    <div class="radio-row">
+                        <div class="radio-opt">
+                            <input type="radio" name="yearTol" id="tol0" value="0">
+                            <label class="radio-lbl" for="tol0">
+                                <div class="radio-pip"></div>
+                                <div class="radio-text">
+                                    <div class="radio-title">Exact match</div>
+                                    <div class="radio-sub">Year must be identical</div>
+                                </div>
+                            </label>
+                        </div>
+                        <div class="radio-opt">
+                            <input type="radio" name="yearTol" id="tol1" value="1" checked>
+                            <label class="radio-lbl" for="tol1">
+                                <div class="radio-pip"></div>
+                                <div class="radio-text">
+                                    <div class="radio-title">±1 Year</div>
+                                    <div class="radio-sub">Recommended</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <div class="field-lbl">Special Character Replacement</div>
+                    <div class="input-inline">
+                        <span class="input-pre">Replace <code style="font-family:var(--font-display);font-size:9px;background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;color:var(--text-dim)">[: &lt;&gt; " / \ | ? *]</code> with</span>
+                        <input type="text" id="specChar" class="input-short" value=" - " maxlength="10" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="field-hint">Characters illegal in Windows filenames. Default is <code> - </code> (space-dash-space).</div>
+                </div>
+
+                <div class="status" id="saveStatus"></div>
+
+                <div class="actions">
+                    <button class="btn btn-ghost" onclick="goTo(2)">Back</button>
+                    <button class="btn btn-primary btn-grow" id="saveBtn" onclick="saveAndLaunch()">
+                        Save &amp; Launch
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Step 4: Success ────────────────────── -->
+            <div class="step-panel" id="sp4">
+                <div style="flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding-bottom:32px;">
+                    <div class="success-ring">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                    </div>
+                    <div class="eyebrow" style="color:var(--success)">Signal Locked</div>
+                    <div class="step-h">You're All Set</div>
+                    <div class="success-server" id="successServer"></div>
+                    <div class="step-desc" style="margin-bottom:0">
+                        Your Plex server is connected and all settings have been saved.
+                        MediaDash is ready to use.
+                    </div>
+                    <div class="actions" style="width:100%;padding-top:32px;">
+                        <button class="btn btn-primary btn-full" onclick="window.location.href='/'">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            Enter MediaDash
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /form-panel -->
+    </div><!-- /setup-card -->
+</div><!-- /setup-root -->
+
+<script>
+(function () {
+    'use strict';
+
+    const SIGNALS = ['AWAITING SIGNAL', 'ACQUIRING SIGNAL', 'SIGNAL LOCKED', 'LIBRARY LOCK', 'LAUNCH READY'];
+    const STRIPS  = [[0,0,0,0,0],[1,0,0,0,0],[1,1,0,0,0],[1,1,1,0,0],[1,1,1,1,1]];
+
+    let _current = 0;
+    let _plexName = '';
+    let _tokenVis = false;
+    let _testPassed = false;
+    let _libraries = [];
+    let _selectedLibraries = [];
+
+    function _esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function goTo(step) {
+        if (step === 2) {
+            const url = _val('plexUrl');
+            const tok = _val('plexToken');
+            if (!url)   { _status('connStatus', 'Please enter your Plex server URL.', 'error'); return; }
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                _status('connStatus', 'URL must start with http:// or https://', 'error'); return;
+            }
+            if (!tok)   { _status('connStatus', 'Please enter your Plex token.', 'error'); return; }
+            if (!_testPassed) { _status('connStatus', 'Please test your connection before continuing.', 'error'); return; }
+        }
+        if (step === 3) {
+            if (_selectedLibraries.length === 0) {
+                _status('libStatus', 'Select at least one library to continue.', 'error');
+                return;
+            }
+        }
+
+        _current = step;
+
+        for (let i = 0; i < 5; i++) {
+            const panel  = document.getElementById('sp' + i);
+            const node   = document.getElementById('sn' + i);
+            const circle = document.getElementById('sc' + i);
+            if (!panel || !circle) continue;
+
+            panel.classList.toggle('active', i === step);
+            if (node) node.classList.toggle('active', i === step);
+
+            if (i < step) {
+                circle.className = 'step-circle done';
+                circle.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+            } else if (i === step) {
+                circle.className = 'step-circle active';
+                circle.textContent = String(i + 1).padStart(2, '0');
+            } else {
+                circle.className = 'step-circle';
+                circle.textContent = String(i + 1).padStart(2, '0');
+            }
+        }
+
+        for (let i = 0; i < 4; i++) {
+            const line = document.getElementById('sl' + i);
+            if (line) line.classList.toggle('done', i < step);
+        }
+
+        const strips = STRIPS[step] || [];
+        for (let i = 0; i < 5; i++) {
+            const dot = document.getElementById('fd' + i);
+            if (dot) dot.classList.toggle('lit', !!strips[i]);
+        }
+
+        const sigEl = document.getElementById('sigText');
+        if (sigEl) sigEl.textContent = SIGNALS[step] || SIGNALS[0];
+    }
+
+    function _val(id) {
+        const el = document.getElementById(id);
+        return el ? el.value.trim() : '';
+    }
+
+    function _status(id, msg, type) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = 'flex';
+        el.className = 'status ' + (type === 'ok' ? 'ok' : type === 'busy' ? 'busy' : 'error');
+
+        const icon = type === 'ok'
+            ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+            : type === 'busy'
+            ? '<div class="spin"></div>'
+            : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+
+        el.innerHTML = icon + '<span>' + _esc(msg) + '</span>';
+    }
+
+    function _setTestPassed(passed) {
+        _testPassed = passed;
+        var nextBtn = document.getElementById('connNextBtn');
+        var hint    = document.getElementById('connHint');
+        if (nextBtn) nextBtn.disabled = !passed;
+        if (hint)    hint.classList.toggle('hidden', passed);
+    }
+
+    function _renderLibraries() {
+        var container = document.getElementById('libCards');
+        if (!container) return;
+        container.innerHTML = '';
+        if (_libraries.length === 0) {
+            container.innerHTML = '<div style="color:var(--text-muted);font-size:13px">No eligible libraries found on your Plex server.</div>';
+            return;
+        }
+        _libraries.forEach(function (lib, i) {
+            var id = 'lib_' + i;
+            var typeLabel = lib.type === 'movie' ? 'Movie' : 'TV Show';
+            var card = document.createElement('div');
+            card.className = 'radio-opt';
+            card.innerHTML =
+                '<input type="checkbox" id="' + id + '" value="' + _esc(lib.title) + '" onchange="toggleLib(this)">' +
+                '<label class="radio-lbl" for="' + id + '">' +
+                '<div class="radio-pip"></div>' +
+                '<div class="radio-text">' +
+                '<div class="radio-title">' + _esc(lib.title) + '</div>' +
+                '<div class="radio-sub">' + typeLabel + '</div>' +
+                '</div></label>';
+            container.appendChild(card);
+        });
+    }
+
+    function toggleLib(el) {
+        var title = el.value;
+        if (el.checked) {
+            if (_selectedLibraries.indexOf(title) === -1) {
+                _selectedLibraries.push(title);
+            }
+        } else {
+            _selectedLibraries = _selectedLibraries.filter(function (t) { return t !== title; });
+        }
+        var st = document.getElementById('libStatus');
+        if (st) st.style.display = 'none';
+    }
+
+    function testConn() {
+        const url = _val('plexUrl');
+        const tok = _val('plexToken');
+        if (!url || !tok) { _status('connStatus', 'Fill in both fields first.', 'error'); return; }
+
+        const testBtn = document.getElementById('testBtn');
+        const nextBtn = document.getElementById('connNextBtn');
+        if (testBtn) testBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+        _status('connStatus', 'Testing connection…', 'busy');
+
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plex_url: url, plex_token: tok, test_only: true }),
+        })
+        .then(r => r.json().then(d => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => {
+            if (testBtn) testBtn.disabled = false;
+            if (!ok) {
+                _setTestPassed(false);
+                _status('connStatus', d.error || 'Connection failed', 'error');
+                return;
+            }
+            _plexName = d.plex_name || '';
+            _setTestPassed(true);
+            _status('connStatus', 'Connected' + (_plexName ? ' — ' + _plexName : ''), 'ok');
+            _libraries = d.libraries || [];
+            _selectedLibraries = [];
+            _renderLibraries();
+        })
+        .catch(err => {
+            if (testBtn) testBtn.disabled = false;
+            _setTestPassed(false);
+            _status('connStatus', 'Error: ' + err.message, 'error');
+        });
+    }
+
+    function saveAndLaunch() {
+        const url       = _val('plexUrl');
+        const tok       = _val('plexToken');
+        const epFmt     = (document.querySelector('input[name="epFmt"]:checked') || {}).value || 'NxEE';
+        const padded    = (document.querySelector('input[name="seasonPad"]:checked') || {}).value === '1';
+        const yearTol   = parseInt((document.querySelector('input[name="yearTol"]:checked') || {}).value || '1', 10);
+        const specChar  = _val('specChar') || ' - ';
+
+        const btn = document.getElementById('saveBtn');
+        if (btn) btn.disabled = true;
+        _status('saveStatus', 'Saving settings and connecting…', 'busy');
+
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                plex_url:                 url,
+                plex_token:               tok,
+                episode_format:           epFmt,
+                season_dir_zero_pad:      padded,
+                year_tolerance:           yearTol,
+                special_char_replacement: specChar,
+                selected_libraries:       _selectedLibraries,
+                test_only:                false,
+            }),
+        })
+        .then(r => r.json().then(d => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => {
+            if (btn) btn.disabled = false;
+            if (!ok) { _status('saveStatus', d.error || 'Save failed', 'error'); return; }
+            _plexName = d.plex_name || _plexName;
+            const srv = document.getElementById('successServer');
+            if (srv) srv.textContent = _plexName ? 'Connected to "' + _plexName + '"' : '';
+            goTo(4);
+        })
+        .catch(err => {
+            if (btn) btn.disabled = false;
+            _status('saveStatus', 'Error: ' + err.message, 'error');
+        });
+    }
+
+    // Expose to inline onclick handlers
+    window.goTo = goTo;
+    window.testConn = testConn;
+    window.saveAndLaunch = saveAndLaunch;
+    window.toggleLib = toggleLib;
+
+    // Token toggle
+    document.getElementById('tokenToggle').addEventListener('click', function () {
+        _tokenVis = !_tokenVis;
+        const input = document.getElementById('plexToken');
+        const ico   = document.getElementById('eyeIco');
+        input.type  = _tokenVis ? 'text' : 'password';
+        ico.innerHTML = _tokenVis
+            ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"/>'
+            : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    });
+
+    // Reset test state when credentials change
+    ['plexUrl', 'plexToken'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function () {
+            var st = document.getElementById('connStatus');
+            if (st) st.style.display = 'none';
+            _setTestPassed(false);
+        });
+    });
+}());
+</script>
+</body>
+</html>
