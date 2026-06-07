@@ -27,17 +27,12 @@ fetch_logger = logging.getLogger('mediadash.search')
 api_logger = logging.getLogger('mediadash.search.api')
 
 # ============================================================
-# RESOLUTION LABELS
+# CALCULATIONS (imported from calculations.py)
 # ============================================================
 
-# MAP PLEX RESOLUTION STRINGS TO DISPLAY LABELS AND SORT WEIGHTS
-RESOLUTION_LABELS = {
-    'sd':   ('SD',    0),
-    '480':  ('480p',  1),
-    '720':  ('720p',  2),
-    '1080': ('1080p', 3),
-    '4k':   ('4K',    4),
-}
+from calculations import (
+    RESOLUTION_LABELS, _compute_dominant_resolution, build_season_size_list,
+)
 
 # ============================================================
 # DATA EXTRACTION
@@ -223,58 +218,11 @@ EXTRACTORS = {
 
 
 # ============================================================
-# COLUMN DEFINITIONS
+# COLUMN DEFINITIONS (imported from customizable_columns.py)
 # ============================================================
 
-COLUMN_DEFINITIONS = {
-    'movie': [
-        {'key': 'title',              'label': 'Title',           'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'year',               'label': 'Year',            'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'rating',             'label': 'Critic Rating',   'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'audienceRating',     'label': 'Rating',          'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'durationFormatted',  'label': 'Time',            'default': True,  'sortable': True,  'expandOnly': False, 'sortKey': 'duration'},
-        {'key': 'resolution',         'label': 'Res',             'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'fileSizeFormatted',  'label': 'Size',            'default': False, 'sortable': True,  'expandOnly': False, 'sortKey': 'fileSize'},
-        {'key': 'genres',             'label': 'Genre',           'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'studio',             'label': 'Studio',          'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'contentRating',      'label': 'Content Rating',  'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'addedAtFormatted',   'label': 'Added',           'default': False, 'sortable': True,  'expandOnly': False, 'sortKey': 'addedAt'},
-        {'key': 'videoCodec',         'label': 'Video Codec',     'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'audioCodec',         'label': 'Audio Codec',     'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'audioChannelsFormatted', 'label': 'Audio Channels', 'default': False, 'sortable': True, 'expandOnly': False, 'sortKey': 'audioChannels'},
-        {'key': 'bitrateFormatted',   'label': 'Bitrate',         'default': False, 'sortable': True,  'expandOnly': False, 'sortKey': 'bitrate'},
-        {'key': 'container',          'label': 'EXT',             'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'subtitleLanguages',  'label': 'Subtitles',       'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'watchStatus',        'label': 'Status',          'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'playCount',          'label': 'Play Count',      'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'lastPlayedAtFormatted', 'label': 'Last Played',  'default': False, 'sortable': True,  'expandOnly': False, 'sortKey': 'lastPlayedAt'},
-        {'key': 'summary',            'label': 'Summary',         'default': False, 'sortable': False, 'expandOnly': True},
-        {'key': 'filePath',           'label': 'File Path',       'default': False, 'sortable': False, 'expandOnly': True},
-    ],
-    'show': [
-        {'key': 'title',              'label': 'Title',           'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'year',               'label': 'Year',            'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'rating',             'label': 'Critic Rating',   'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'audienceRating',     'label': 'Rating',          'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'seasons',            'label': 'S',               'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'episodes',           'label': 'E',               'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'totalSizeFormatted', 'label': 'Size',             'default': True,  'sortable': True,  'expandOnly': False, 'sortKey': 'totalSize'},
-        {'key': 'dominantResolution', 'label': 'Res',              'default': True,  'sortable': True,  'expandOnly': False, 'sortKey': 'dominantResolutionRank'},
-        {'key': 'totalDurationFormatted', 'label': 'Duration',      'default': False, 'sortable': True, 'expandOnly': False, 'sortKey': 'totalDuration'},
-        {'key': 'watchedEpisodes',    'label': 'Watched',         'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'watchProgress',      'label': 'Progress',        'default': True,  'sortable': True,  'expandOnly': False, 'sortKey': 'watchProgressPercent'},
-        {'key': 'genres',             'label': 'Genre',           'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'studio',             'label': 'Studio',          'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'contentRating',      'label': 'Content Rating',  'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'watchStatus',        'label': 'Watch Status',    'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'showStatus',         'label': 'Show Status',     'default': True,  'sortable': True,  'expandOnly': False},
-        {'key': 'subtitleLanguages',  'label': 'Subtitles',       'default': False, 'sortable': True,  'expandOnly': False},
-        {'key': 'addedAtFormatted',   'label': 'Added',           'default': False, 'sortable': True,  'expandOnly': False, 'sortKey': 'addedAt'},
-        {'key': 'lastPlayedAtFormatted', 'label': 'Last Played',  'default': False, 'sortable': True,  'expandOnly': False, 'sortKey': 'lastPlayedAt'},
-        {'key': 'summary',            'label': 'Summary',         'default': False, 'sortable': False, 'expandOnly': True},
-        {'key': 'filePath',           'label': 'File Path',       'default': False, 'sortable': False, 'expandOnly': True},
-    ],
-}
+from customizable_columns import COLUMN_DEFINITIONS
+
 
 # ============================================================
 # EPISODE METADATA AGGREGATION
@@ -349,18 +297,9 @@ def fetch_episode_metadata(section):
 
         # COMPUTE DOMINANT RESOLUTION PER SHOW: PLURALITY, TIE-BREAK BY HIGHER RANK
         for show_data in meta.values():
-            res_counts = show_data.get('resolutions', {})
-            if res_counts:
-                dominant_key = max(
-                    res_counts,
-                    key=lambda r: (res_counts[r], RESOLUTION_LABELS.get(r, (r, -1))[1])
-                )
-                label, rank = RESOLUTION_LABELS.get(dominant_key, (dominant_key.upper(), -1))
-                show_data['dominant_resolution'] = label
-                show_data['dominant_resolution_rank'] = rank
-            else:
-                show_data['dominant_resolution'] = None
-                show_data['dominant_resolution_rank'] = -1
+            label, rank = _compute_dominant_resolution(show_data.get('resolutions', {}))
+            show_data['dominant_resolution'] = label
+            show_data['dominant_resolution_rank'] = rank
 
         ep_elapsed = time.time() - ep_start
         fetch_logger.info(f"Fetched episode metadata for {len(meta)} shows in {ep_elapsed:.1f}s")
@@ -382,29 +321,7 @@ def _merge_episode_meta(items, episode_meta, progress_fn=None):
             item['totalDurationFormatted'] = format_duration_short(show_meta['total_duration'])
             item['dominantResolution'] = show_meta.get('dominant_resolution')
             item['dominantResolutionRank'] = show_meta.get('dominant_resolution_rank', -1)
-            season_list = []
-            for sname, sdata in show_meta['seasons'].items():
-                s_res_counts = sdata.get('resolutions', {})
-                if s_res_counts:
-                    s_dominant_key = max(
-                        s_res_counts,
-                        key=lambda r: (s_res_counts[r], RESOLUTION_LABELS.get(r, (r, -1))[1])
-                    )
-                    s_label, _ = RESOLUTION_LABELS.get(s_dominant_key, (s_dominant_key.upper(), -1))
-                    s_dominant_resolution = s_label
-                else:
-                    s_dominant_resolution = None
-                season_list.append({
-                    'name': sname,
-                    'size': sdata['size'],
-                    'sizeFormatted': format_bytes(sdata['size']),
-                    'episodeCount': sdata['count'],
-                    'duration': sdata['duration'],
-                    'durationFormatted': format_duration_short(sdata['duration']),
-                    'dominantResolution': s_dominant_resolution,
-                })
-            season_list.sort(key=lambda s: (m := re.search(r'\d+', s['name'])) and int(m.group()) or float('inf'))
-            item['seasonSizes'] = season_list
+            item['seasonSizes'] = build_season_size_list(show_meta['seasons'])
             sub_langs = sorted(show_meta.get('subtitle_langs', set()))
             item['subtitleLanguages'] = ', '.join(sub_langs) if sub_langs else None
             item['subtitleCount'] = len(sub_langs)

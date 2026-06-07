@@ -10,7 +10,7 @@ from plexapi.exceptions import NotFound, Unauthorized
 
 from shared import (
     cache, enrichment, get_plex, with_plex_retry,
-    format_bytes, format_duration_short, PLEX_URL, PLEX_TOKEN,
+    PLEX_URL, PLEX_TOKEN,
     sort_key_fn, _libraries_from_cache, _libraries_from_plex,
     PRIO_EPISODE,
 )
@@ -32,62 +32,12 @@ def _search_cold_worker(cache_key, library_title, library_type):
         api_logger.error(f"Browse cold worker failed for '{library_title}': {e}")
 
 # ============================================================
-# PROJECTIONS
+# PROJECTIONS (imported from calculations.py)
 # ============================================================
 
-def _project_movie(item, rank):
-    return {
-        'rank': rank,
-        'title': item['title'],
-        'year': item.get('year'),
-        'fileSize': item.get('fileSize', 0),
-        'fileSizeFormatted': item.get('fileSizeFormatted'),
-        'resolution': item.get('resolution'),
-        'videoCodec': item.get('videoCodec'),
-        'bitrate': item.get('bitrate'),
-        'container': item.get('container'),
-        'durationFormatted': format_duration_short(item.get('duration')),
-        'filePath': item.get('filePath'),
-        'subtitleLanguages': item.get('subtitleLanguages'),
-        'mediaType': 'movie',
-    }
-
-
-def _project_show(item, rank):
-    season_sizes = [
-        {
-            **season,
-            'durationFormatted': format_duration_short(season.get('duration')),
-        }
-        for season in item.get('seasonSizes', [])
-    ]
-
-    return {
-        'rank': rank,
-        'title': item['title'],
-        'year': item.get('year'),
-        'totalSize': item.get('totalSize', 0),
-        'totalSizeFormatted': item.get('totalSizeFormatted'),
-        'dominantResolution': item.get('dominantResolution'),
-        'seasons': item.get('seasons', 0),
-        'episodes': item.get('episodes', 0),
-        'totalDurationFormatted': format_duration_short(item.get('totalDuration')),
-        'seasonSizes': season_sizes,
-        'filePath': item.get('filePath'),
-        'showStatus': item.get('showStatus', 'Unknown'),
-        'mediaType': 'show',
-    }
-
-
-PROJECTORS = {
-    'movie': _project_movie,
-    'show': _project_show,
-}
-
-SIZE_SORT_KEY = {
-    'movie': 'fileSize',
-    'show': 'totalSize',
-}
+from calculations import (
+    _project_movie, _project_show, PROJECTORS, SIZE_SORT_KEY,
+)
 
 # ============================================================
 # HELPERS
