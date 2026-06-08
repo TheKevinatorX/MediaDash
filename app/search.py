@@ -302,6 +302,47 @@ def fetch_episode_metadata(section):
     return meta
 
 
+# FETCH RAW PER-EPISODE ROWS FOR ONE SEASON OF ONE SHOW, ON DEMAND (NOT CACHED)
+# Mirrors fetch_episode_metadata's per-episode extraction shape but returns
+# individual rows instead of rolling them up — used by the Episodes drill-down.
+def fetch_episodes_for_season(show, season_name):
+    rows = []
+    for ep in show.episodes():
+        season_title = getattr(ep, 'parentTitle', None) or f"Season {getattr(ep, 'parentIndex', '?')}"
+        if season_title != season_name:
+            continue
+
+        ep_size = 0
+        try:
+            if ep.media and ep.media[0].parts:
+                ep_size = getattr(ep.media[0].parts[0], 'size', 0) or 0
+        except (IndexError, AttributeError):
+            pass
+
+        ep_duration = getattr(ep, 'duration', 0) or 0
+
+        ep_resolution = None
+        try:
+            if ep.media:
+                ep_resolution = getattr(ep.media[0], 'videoResolution', None)
+        except (IndexError, AttributeError):
+            pass
+
+        rows.append({
+            'title': ep.title,
+            'index': getattr(ep, 'index', None),
+            'seasonName': season_title,
+            'size': ep_size,
+            'sizeFormatted': format_bytes(ep_size),
+            'duration': ep_duration,
+            'durationFormatted': format_duration_short(ep_duration),
+            'resolution': ep_resolution,
+        })
+
+    rows.sort(key=lambda r: r['index'] or 0)
+    return rows
+
+
 # MERGE EPISODE METADATA INTO SHOW ITEMS LIST IN-PLACE
 def _merge_episode_meta(items, episode_meta, progress_fn=None):
     total = len(items)

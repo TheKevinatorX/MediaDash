@@ -8,6 +8,7 @@ import time
 from flask import Blueprint, jsonify, request
 from plexapi.exceptions import Unauthorized
 
+from search import fetch_episodes_for_season
 from shared import (
     cache, enrichment, with_plex_retry,
     sort_key_fn, _libraries_from_cache, _libraries_from_plex,
@@ -159,6 +160,30 @@ def get_library(title):
         'enriched': False, 'enrichmentRunning': False, 'cacheAge': None,
         'needsSync': True,
     })
+
+
+@size_bp.route('/library/<path:title>/episodes')
+def get_episodes(title):
+    show_title = request.args.get('show')
+    season_name = request.args.get('season')
+    if not show_title or not season_name:
+        return jsonify({'error': 'show and season query parameters are required'}), 400
+
+    try:
+        def _fetch(plex):
+            section = plex.library.section(title)
+            matches = section.search(title=show_title, libtype='show')
+            if not matches:
+                return jsonify({'error': f"Show '{show_title}' not found in '{title}'"}), 404
+            episodes = fetch_episodes_for_season(matches[0], season_name)
+            return jsonify({'show': show_title, 'season': season_name, 'episodes': episodes})
+
+        return with_plex_retry(_fetch)
+    except Unauthorized:
+        return jsonify({'error': 'Authentication failed. Check your PLEX_TOKEN.'}), 401
+    except Exception as e:
+        api_logger.error(f"Failed to fetch episodes for '{show_title}' / '{season_name}': {e}")
+        return jsonify({'error': f'Failed to fetch episodes: {e}'}), 500
 
 
 @size_bp.route('/library/<path:title>/enrichment')
