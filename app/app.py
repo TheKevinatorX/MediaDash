@@ -101,6 +101,8 @@ def _startup_auto_sync():
         from plex_sync import start_full_sync
         if start_full_sync():
             logger.info('Startup auto-sync: cache cold/stale, full sync started')
+        else:
+            logger.info('Startup auto-sync: sync already running')
 
     Thread(target=_run, daemon=True, name='startup-auto-sync').start()
 
@@ -623,11 +625,16 @@ def get_progress():
 def trigger_sync():
     from plex_sync import start_full_sync, SYNC_KEY
 
-    started = start_full_sync()
-    status = enrichment.get_status(SYNC_KEY)
+    try:
+        started = start_full_sync()
+    except Exception as e:
+        logger.error(f"Failed to trigger full sync: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 503
+
     if started:
         logger.info('Full Plex sync triggered via /api/sync')
         return jsonify({'status': 'started'})
+    status = enrichment.get_status(SYNC_KEY)
     return jsonify({'status': 'already_running' if status in ('pending', 'running') else 'started'})
 
 
