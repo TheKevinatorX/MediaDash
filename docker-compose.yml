@@ -10,3 +10,6 @@ services:
       TZ: America/New_York
     volumes:
       - ./cache:/data/cache
+      - /media/Movies:/media/Movies:ro
+      - /media/FullSeries:/media/FullSeries:ro
+      - /media/NAS:/media/NAS:ro
