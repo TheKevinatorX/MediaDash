@@ -472,6 +472,9 @@ const SizeDash = (() => {
         const episodesClose = document.getElementById('sizeEpisodesClose');
         if (episodesClose) episodesClose.addEventListener('click', _closeEpisodesPanel);
 
+        const sizeTbody = document.getElementById('sizeTableBody');
+        if (sizeTbody) sizeTbody.addEventListener('click', _handleEpisodesButtonClick);
+
         let searchTimeout = null;
         const searchInput = document.getElementById('sizeSearch');
         const searchClear = document.getElementById('sizeSearchClear');
@@ -1417,8 +1420,6 @@ const SizeDash = (() => {
             }
         }
         tbody.innerHTML = bodyHTML;
-
-        tbody.addEventListener('click', _handleEpisodesButtonClick);
 
         tbody.querySelectorAll('.data-row').forEach(row => {
             row.addEventListener('click', () => {
