@@ -303,9 +303,11 @@ function createColumnManager(config) {
                     case 'deskAll':
                         state.visibleColumns = tableCols.map(c => c.key);
                         break;
-                    case 'deskNone':
-                        state.visibleColumns = tableCols.filter(c => c.key === 'title').map(c => c.key);
+                    case 'deskNone': {
+                        const keepCol = tableCols.find(c => c.key === 'title') || tableCols[0];
+                        state.visibleColumns = keepCol ? [keepCol.key] : [];
                         break;
+                    }
                     case 'deskDefaults':
                         loadVisibleColumns();
                         state.columnOrder = [];
@@ -313,9 +315,11 @@ function createColumnManager(config) {
                     case 'mobAll':
                         state.mobileColumns = tableCols.map(c => c.key);
                         break;
-                    case 'mobNone':
-                        state.mobileColumns = tableCols.filter(c => c.key === 'title').map(c => c.key);
+                    case 'mobNone': {
+                        const keepCol = tableCols.find(c => c.key === 'title') || tableCols[0];
+                        state.mobileColumns = keepCol ? [keepCol.key] : [];
                         break;
+                    }
                     case 'mobDefaults':
                         state.mobileColumns = tableCols.filter(c => defaultMobileKeysFn().includes(c.key)).map(c => c.key);
                         break;
