@@ -655,15 +655,15 @@ const SearchDash = (() => {
     // DATA FETCHING
     // --------------------------------------------------------
 
-    async function _fetchLibrary(title, type, sync = false) {
-        if (dataCache[title] && dataCache[title].enriched && !sync) return;
+    async function _fetchLibrary(title, type) {
+        if (dataCache[title] && dataCache[title].enriched) return;
 
         _showLoading(true, 'Loading...');
         _hideError();
         _hideEmpty();
 
         try {
-            const url = `/search/library/${encodeURIComponent(title)}?all=true${sync ? '&sync=1' : ''}`;
+            const url = `/search/library/${encodeURIComponent(title)}?all=true`;
             const data = await api(url);
             dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null };
             _showLoading(false);
@@ -1696,7 +1696,8 @@ const SearchDash = (() => {
 
     async function refreshActive() {
         if (state.activeLibrary) {
-            await _fetchLibrary(state.activeLibrary, state.activeLibraryType, true);
+            delete dataCache[state.activeLibrary];
+            await _fetchLibrary(state.activeLibrary, state.activeLibraryType);
             _applyView();
         }
     }

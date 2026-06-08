@@ -841,8 +841,8 @@ const SizeDash = (() => {
     // DATA FETCHING
     // --------------------------------------------------------
 
-    async function _fetchLibrary(title, sync = false) {
-        if (dataCache[title] && dataCache[title].enriched && !sync) {
+    async function _fetchLibrary(title) {
+        if (dataCache[title] && dataCache[title].enriched) {
             state.allItems = dataCache[title].items;
             return;
         }
@@ -852,7 +852,7 @@ const SizeDash = (() => {
         _hideEmpty();
 
         try {
-            const url = `/size/library/${encodeURIComponent(title)}?all=true${sync ? '&sync=1' : ''}`;
+            const url = `/size/library/${encodeURIComponent(title)}?all=true`;
             const data = await api(url);
             dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null };
             _updateSeasonTabCount();
@@ -2007,7 +2007,8 @@ const SizeDash = (() => {
 
     async function refreshActive() {
         if (state.activeLibrary && state.viewMode !== 'seasons') {
-            await _fetchLibrary(state.activeLibrary, true);
+            delete dataCache[state.activeLibrary];
+            await _fetchLibrary(state.activeLibrary);
             _applyView();
         }
     }

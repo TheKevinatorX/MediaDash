@@ -558,12 +558,12 @@ const ProgressHub = (() => {
     }
 
     function _chipCls(type) {
-        return { search: 'phub-chip--search', naming: 'phub-chip--naming', episodes: 'phub-chip--episodes' }[type]
+        return { search: 'phub-chip--search', naming: 'phub-chip--naming', episodes: 'phub-chip--episodes', sync: 'phub-chip--sync' }[type]
             || 'phub-chip--unknown';
     }
 
     function _chipLabel(type) {
-        return { search: 'Search', naming: 'Naming', episodes: 'Episodes' }[type] || type;
+        return { search: 'Search', naming: 'Naming', episodes: 'Episodes', sync: 'Full Sync' }[type] || type;
     }
 
     // ESCAPE STRING FOR USE AS A CSS ATTRIBUTE SELECTOR VALUE (NO QUOTES)

@@ -360,15 +360,15 @@ const NamingDash = (() => {
     // DATA FETCHING
     // --------------------------------------------------------
 
-    async function _fetchLibrary(title, type, sync = false) {
-        if (dataCache[title] && dataCache[title].enriched && !sync) return;
+    async function _fetchLibrary(title, type) {
+        if (dataCache[title] && dataCache[title].enriched) return;
 
         _showLoading(true, 'Analyzing file names...');
         _hideError();
         _hideEmpty();
 
         try {
-            const url = `/naming/library/${encodeURIComponent(title)}${sync ? '?sync=1' : ''}`;
+            const url = `/naming/library/${encodeURIComponent(title)}`;
             const data = await api(url);
             const stats = _computeStats(data.items, data.libraryType);
             dataCache[title] = {
@@ -1476,7 +1476,8 @@ const NamingDash = (() => {
 
     async function refreshActive() {
         if (state.activeLibrary) {
-            await _fetchLibrary(state.activeLibrary, state.activeLibraryType, true);
+            delete dataCache[state.activeLibrary];
+            await _fetchLibrary(state.activeLibrary, state.activeLibraryType);
             _applyView();
         }
     }
