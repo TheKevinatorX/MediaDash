@@ -17,9 +17,6 @@ const SearchDash = (() => {
         activeLibrary: null,
         activeLibraryType: null,
         columns: [],
-        visibleColumns: [],
-        mobileColumns: [],
-        columnLabels: { desktop: {}, mobile: {} },
         items: [],
         search: '',
         sortBy: null,
@@ -33,8 +30,6 @@ const SearchDash = (() => {
         columnPickerOpen: false,
         columnFilters: {},
         quickFilters: { criticRating: '', audienceRating: '', year: '', subtitles: '' },
-        columnWidths: {},
-        columnOrder: [],
         enrichmentPolling: null,
         enrichmentProgress: null,
     };
@@ -80,6 +75,19 @@ const SearchDash = (() => {
         watchProgress:            'Prog',
         showStatus:               'Stat',
     };
+
+    const colMgr = createColumnManager({
+        lsPrefix: LS_PREFIX,
+        viewKeyFn: () => state.activeLibrary,
+        getMasterCols: () => [{ key: 'rank', label: '#', sortable: false }, ...state.columns],
+        mobileLabels: SEARCH_MOBILE_LABELS,
+        defaultMobileKeysFn: () => state.activeLibraryType === 'movie'
+            ? ['title', 'year', 'durationFormatted', 'resolution']
+            : ['title', 'year', 'seasons', 'episodes', 'dominantResolution'],
+        pickerEnabled: true,
+        pickerElementId: 'searchColumnPicker',
+        onChange: () => _renderTable(),
+    });
 
     // QUICK-FILTER MAPPING: state-key -> select element id (matches index.html)
     const QF_IDS = {
@@ -187,7 +195,7 @@ const SearchDash = (() => {
             e.stopPropagation();
             state.columnPickerOpen = !state.columnPickerOpen;
             picker.style.display = state.columnPickerOpen ? 'flex' : 'none';
-            if (state.columnPickerOpen) _renderColumnPicker();
+            if (state.columnPickerOpen) colMgr.renderColumnPicker();
         });
 
         document.addEventListener('click', (e) => {
@@ -248,11 +256,11 @@ const SearchDash = (() => {
         _updateTabStyles();
 
         await _loadColumns(type);
-        _loadColumnPreferences(title);
-        _loadColumnWidths(title);
-        _loadColumnOrder(title);
-        _loadMobileColumns(title);
-        _loadColumnLabels(title);
+        colMgr.loadVisibleColumns();
+        colMgr.loadColumnWidths();
+        colMgr.loadColumnOrder();
+        colMgr.loadMobileColumns();
+        colMgr.loadColumnLabels();
 
         if (dataCache[title] && dataCache[title].enriched) {
             _applyView();
@@ -351,304 +359,6 @@ const SearchDash = (() => {
         } catch {
             state.columns = [];
         }
-    }
-
-    function _loadColumnPreferences(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}cols_${title}`, null);
-        if (Array.isArray(saved) && saved.length > 0) {
-            state.visibleColumns = saved;
-        } else {
-            state.visibleColumns = state.columns.filter(c => c.default && !c.expandOnly).map(c => c.key);
-        }
-    }
-
-    function _saveColumnPreferences() {
-        lsSetJSON(`${LS_PREFIX}cols_${state.activeLibrary}`, state.visibleColumns);
-    }
-
-    function _loadColumnWidths(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}widths_${title}`, null);
-        state.columnWidths = (saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : {};
-    }
-
-    function _saveColumnWidths() {
-        lsSetJSON(`${LS_PREFIX}widths_${state.activeLibrary}`, state.columnWidths);
-    }
-
-    function _loadColumnOrder(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}order_${title}`, null);
-        state.columnOrder = (Array.isArray(saved) && saved.length > 0) ? saved : [];
-    }
-
-    function _saveColumnOrder() {
-        lsSetJSON(`${LS_PREFIX}order_${state.activeLibrary}`, state.columnOrder);
-    }
-
-    function _loadMobileColumns(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}mobile_${title}`, null);
-        if (Array.isArray(saved) && saved.length > 0) {
-            state.mobileColumns = saved;
-            return;
-        }
-        const defaults = state.activeLibraryType === 'movie'
-            ? ['title', 'year', 'durationFormatted', 'resolution']
-            : ['title', 'year', 'seasons', 'episodes', 'dominantResolution'];
-        state.mobileColumns = state.columns.filter(c => defaults.includes(c.key)).map(c => c.key);
-    }
-
-    function _saveMobileColumns() {
-        lsSetJSON(`${LS_PREFIX}mobile_${state.activeLibrary}`, state.mobileColumns);
-    }
-
-    function _loadColumnLabels(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}labels_${title}`, null);
-        if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-            if (saved.desktop !== undefined || saved.mobile !== undefined) {
-                state.columnLabels = { desktop: saved.desktop || {}, mobile: saved.mobile || {} };
-            } else {
-                state.columnLabels = { desktop: saved, mobile: {} };
-            }
-        } else {
-            state.columnLabels = { desktop: {}, mobile: {} };
-        }
-    }
-
-    function _saveColumnLabels() {
-        lsSetJSON(`${LS_PREFIX}labels_${state.activeLibrary}`, state.columnLabels);
-    }
-
-    function _getColLabel(col, isMobile) {
-        if (col.key === 'rank') return '#';
-        if (isMobile) return state.columnLabels.mobile[col.key] || SEARCH_MOBILE_LABELS[col.key] || col.label;
-        return state.columnLabels.desktop[col.key] || col.label;
-    }
-
-    function _syncColumnOrder() {
-        if (state.columnOrder.length === 0) return;
-        const visibleKeys = state.columns.filter(c => !c.expandOnly && state.visibleColumns.includes(c.key)).map(c => c.key);
-        state.columnOrder = state.columnOrder.filter(k => visibleKeys.includes(k));
-        for (const k of visibleKeys) {
-            if (!state.columnOrder.includes(k)) state.columnOrder.push(k);
-        }
-    }
-
-    function _getOrderedVisibleCols() {
-        const rankCol = { key: 'rank', label: '#', sortable: false };
-        const vis = state.columns.filter(c => !c.expandOnly && state.visibleColumns.includes(c.key));
-        if (state.columnOrder.length === 0) return [rankCol, ...vis];
-        const ordered = [];
-        for (const key of state.columnOrder) {
-            const col = vis.find(c => c.key === key);
-            if (col) ordered.push(col);
-        }
-        for (const col of vis) {
-            if (!ordered.includes(col)) ordered.push(col);
-        }
-        return [rankCol, ...ordered];
-    }
-
-    function _renderColumnPicker() {
-        const picker = document.getElementById('searchColumnPicker');
-        const tableCols = state.columns.filter(c => !c.expandOnly);
-        const hasLabels = Object.keys(state.columnLabels.desktop).length > 0 || Object.keys(state.columnLabels.mobile).length > 0;
-
-        let html = '<div class="picker-col-header"><span>Desktop</span><span>Mobile</span><span title="Desktop">D</span><span title="Mobile">M</span></div>';
-        html += '<div class="picker-list">';
-        for (const col of tableCols) {
-            const dChecked  = state.visibleColumns.includes(col.key) ? 'checked' : '';
-            const mChecked  = state.mobileColumns.includes(col.key) ? 'checked' : '';
-            const dDisabled = col.key === 'title' ? 'disabled' : '';
-            const mDisabled = col.key === 'title' ? 'disabled' : '';
-            const dCustom = state.columnLabels.desktop[col.key] || '';
-            const mCustom = state.columnLabels.mobile[col.key] || '';
-            const mPlaceholder = SEARCH_MOBILE_LABELS[col.key] || col.label;
-            html += `<div class="picker-item picker-item--grid">
-                <input type="text" class="picker-label-input" data-col="${col.key}" data-labeltype="desktop" value="${escapeHTML(dCustom)}" placeholder="${escapeHTML(col.label)}">
-                <input type="text" class="picker-label-input picker-label-input--mobile" data-col="${col.key}" data-labeltype="mobile" value="${escapeHTML(mCustom)}" placeholder="${escapeHTML(mPlaceholder)}">
-                <input type="checkbox" data-col="${col.key}" data-section="desktop" ${dChecked} ${dDisabled}>
-                <input type="checkbox" data-col="${col.key}" data-section="mobile" ${mChecked} ${mDisabled}>
-            </div>`;
-        }
-        html += '</div>';
-        const orderedMobSearch = state.mobileColumns.map(k => tableCols.find(c => c.key === k)).filter(Boolean);
-        if (orderedMobSearch.length > 0) {
-            html += '<div class="picker-mobile-order"><div class="picker-order-header">Mobile Column Order</div><div class="picker-order-list">';
-            orderedMobSearch.forEach(c => {
-                const lbl = _getColLabel(c, true);
-                html += `<div class="picker-order-item" draggable="true" data-col="${c.key}"><span class="picker-drag-handle">⠿</span><span>${escapeHTML(lbl)}</span></div>`;
-            });
-            html += '</div></div>';
-        }
-        html += '<div class="picker-footer">';
-        html += '<div class="picker-footer-section"><span class="picker-footer-label">Desktop</span>';
-        html += '<button class="btn btn-sm" id="searchDeskAll" title="Select All">All</button>';
-        html += '<button class="btn btn-sm" id="searchDeskNone" title="Deselect All">None</button>';
-        html += '<button class="btn btn-sm" id="searchDeskDefaults" title="Reset to defaults">↺</button></div>';
-        html += '<div class="picker-footer-section"><span class="picker-footer-label">Mobile</span>';
-        html += '<button class="btn btn-sm" id="searchMobAll" title="Select All">All</button>';
-        html += '<button class="btn btn-sm" id="searchMobNone" title="Deselect All">None</button>';
-        html += '<button class="btn btn-sm" id="searchMobDefaults" title="Reset to defaults">↺</button></div>';
-        if (hasLabels) {
-            html += '<div class="picker-footer-section"><button class="btn btn-sm" id="searchResetLabels" style="flex:1">Reset Label Names</button></div>';
-        }
-        html += '<div class="picker-footer-section picker-save-section"><button class="btn btn-sm btn-accent" id="searchSaveColumns" style="flex:1">Save</button></div>';
-        html += '</div>';
-        picker.innerHTML = html;
-
-        // Mobile column order drag-and-drop
-        const searchOrderList = picker.querySelector('.picker-order-list');
-        if (searchOrderList) {
-            let dragSrc = null;
-            searchOrderList.querySelectorAll('.picker-order-item').forEach(item => {
-                item.addEventListener('dragstart', e => {
-                    dragSrc = item;
-                    item.classList.add('dragging');
-                    e.dataTransfer.effectAllowed = 'move';
-                });
-                item.addEventListener('dragend', () => {
-                    item.classList.remove('dragging');
-                    state.mobileColumns = [...searchOrderList.querySelectorAll('.picker-order-item')].map(i => i.dataset.col);
-                    _saveColumnPreferences();
-                    _renderTable();
-                });
-                item.addEventListener('dragover', e => {
-                    e.preventDefault();
-                    if (!dragSrc || item === dragSrc) return;
-                    const { top, height } = item.getBoundingClientRect();
-                    searchOrderList.insertBefore(dragSrc, e.clientY < top + height / 2 ? item : item.nextSibling);
-                });
-                item.addEventListener('dragenter', e => e.preventDefault());
-            });
-        }
-
-        let labelDebounce = null;
-        picker.querySelectorAll('.picker-label-input').forEach(input => {
-            input.addEventListener('input', () => {
-                clearTimeout(labelDebounce);
-                labelDebounce = setTimeout(() => {
-                    const colKey = input.dataset.col;
-                    const labelType = input.dataset.labeltype;
-                    const val = input.value.trim();
-                    if (val) state.columnLabels[labelType][colKey] = val;
-                    else delete state.columnLabels[labelType][colKey];
-                    _saveColumnLabels();
-                    _renderTable();
-                    const footer = picker.querySelector('.picker-footer');
-                    const nowHasLabels = Object.keys(state.columnLabels.desktop).length > 0 || Object.keys(state.columnLabels.mobile).length > 0;
-                    const existing = document.getElementById('searchResetLabels');
-                    if (nowHasLabels && !existing) {
-                        const sec = document.createElement('div');
-                        sec.className = 'picker-footer-section';
-                        sec.innerHTML = '<button class="btn btn-sm" id="searchResetLabels" style="flex:1">Reset Label Names</button>';
-                        footer.appendChild(sec);
-                        sec.querySelector('button').addEventListener('click', () => {
-                            state.columnLabels = { desktop: {}, mobile: {} };
-                            _saveColumnLabels();
-                            _renderTable();
-                            _renderColumnPicker();
-                        });
-                    } else if (!nowHasLabels && existing) {
-                        existing.closest('.picker-footer-section').remove();
-                    }
-                }, 250);
-            });
-        });
-
-        picker.querySelectorAll('input[data-section="desktop"]').forEach(cb => {
-            cb.addEventListener('change', () => {
-                const colKey = cb.dataset.col;
-                if (cb.checked) {
-                    if (!state.visibleColumns.includes(colKey)) state.visibleColumns.push(colKey);
-                } else {
-                    state.visibleColumns = state.visibleColumns.filter(k => k !== colKey);
-                    state.columnOrder = state.columnOrder.filter(k => k !== colKey);
-                }
-                _syncColumnOrder();
-                _saveColumnPreferences();
-                _saveColumnOrder();
-                _renderTable();
-            });
-        });
-
-        picker.querySelectorAll('input[data-section="mobile"]').forEach(cb => {
-            cb.addEventListener('change', () => {
-                const colKey = cb.dataset.col;
-                if (cb.checked) {
-                    if (!state.mobileColumns.includes(colKey)) state.mobileColumns.push(colKey);
-                } else {
-                    state.mobileColumns = state.mobileColumns.filter(k => k !== colKey);
-                }
-                _saveMobileColumns();
-                if (_isMobile()) _renderTable();
-            });
-        });
-
-        document.getElementById('searchDeskAll').addEventListener('click', () => {
-            state.visibleColumns = tableCols.map(c => c.key);
-            _syncColumnOrder();
-            _saveColumnPreferences();
-            _saveColumnOrder();
-            _renderColumnPicker();
-            _renderTable();
-        });
-
-        document.getElementById('searchDeskNone').addEventListener('click', () => {
-            state.visibleColumns = ['title'];
-            state.columnOrder = state.columnOrder.filter(k => k === 'title');
-            _saveColumnPreferences();
-            _saveColumnOrder();
-            _renderColumnPicker();
-            _renderTable();
-        });
-
-        document.getElementById('searchDeskDefaults').addEventListener('click', () => {
-            state.visibleColumns = state.columns.filter(c => c.default && !c.expandOnly).map(c => c.key);
-            state.columnOrder = [];
-            _saveColumnPreferences();
-            _saveColumnOrder();
-            _renderColumnPicker();
-            _renderTable();
-        });
-
-        const defaultMobileKeys = state.activeLibraryType === 'movie'
-            ? ['title', 'year', 'durationFormatted', 'resolution']
-            : ['title', 'year', 'seasons', 'episodes', 'dominantResolution'];
-
-        document.getElementById('searchMobAll').addEventListener('click', () => {
-            state.mobileColumns = tableCols.map(c => c.key);
-            _saveMobileColumns();
-            _renderColumnPicker();
-            if (_isMobile()) _renderTable();
-        });
-
-        document.getElementById('searchMobNone').addEventListener('click', () => {
-            state.mobileColumns = ['title'];
-            _saveMobileColumns();
-            _renderColumnPicker();
-            if (_isMobile()) _renderTable();
-        });
-
-        document.getElementById('searchMobDefaults').addEventListener('click', () => {
-            state.mobileColumns = state.columns.filter(c => defaultMobileKeys.includes(c.key)).map(c => c.key);
-            _saveMobileColumns();
-            _renderColumnPicker();
-            if (_isMobile()) _renderTable();
-        });
-
-        const resetLabelsBtn = document.getElementById('searchResetLabels');
-        if (resetLabelsBtn) {
-            resetLabelsBtn.addEventListener('click', () => {
-                state.columnLabels = { desktop: {}, mobile: {} };
-                _saveColumnLabels();
-                _renderTable();
-                _renderColumnPicker();
-            });
-        }
-
-        document.getElementById('searchSaveColumns').addEventListener('click', () => {
-            state.columnPickerOpen = false;
-            picker.style.display = 'none';
-        });
     }
 
     // --------------------------------------------------------
@@ -874,7 +584,7 @@ const SearchDash = (() => {
 
     function _getMobileColumns() {
         const rankCol = { key: 'rank', label: '#', sortable: false };
-        return [rankCol, ...state.mobileColumns.map(k => state.columns.find(c => c.key === k)).filter(Boolean)];
+        return [rankCol, ...colMgr.state.mobileColumns.map(k => state.columns.find(c => c.key === k)).filter(Boolean)];
     }
 
     // --------------------------------------------------------
@@ -887,8 +597,8 @@ const SearchDash = (() => {
         const table = document.getElementById('searchTable');
 
         const mobile = _isMobile();
-        const visibleCols = mobile ? _getMobileColumns() : _getOrderedVisibleCols();
-        const hasAnyWidth = Object.keys(state.columnWidths).length > 0;
+        const visibleCols = mobile ? _getMobileColumns() : colMgr.getOrderedVisibleCols();
+        const hasAnyWidth = Object.keys(colMgr.state.columnWidths).length > 0;
         table.classList.toggle('resizable', hasAnyWidth);
 
         let headerHTML = '<tr><th class="expand-col"></th>';
@@ -899,9 +609,9 @@ const SearchDash = (() => {
             const _fv = state.columnFilters[col.key];
             const hasFilter = _fv instanceof Set ? _fv.size > 0 : !!_fv;
             const filterActiveClass = hasFilter ? 'active' : '';
-            const colLabel = _getColLabel(col, mobile);
-            const widthStyle = state.columnWidths[col.key]
-                ? `width:${state.columnWidths[col.key]}px;`
+            const colLabel = colMgr.getColLabel(col, mobile);
+            const widthStyle = colMgr.state.columnWidths[col.key]
+                ? `width:${colMgr.state.columnWidths[col.key]}px;`
                 : hasAnyWidth ? `min-width:${colLabel.length + 3}ch;` : '';
 
             const rankClass = col.key === 'rank' ? 'row-num-col' : '';
@@ -939,8 +649,8 @@ const SearchDash = (() => {
             });
         });
 
-        _initResizeHandles(thead);
-        _initColumnDrag(thead);
+        colMgr.initResizeHandles(thead, "searchTable", (resizing) => { isResizing = resizing; });
+        colMgr.initColumnDrag(thead);
 
         let bodyHTML = '';
         for (let i = 0; i < state.items.length; i++) {
@@ -1091,126 +801,6 @@ const SearchDash = (() => {
         });
 
         dropdown.addEventListener('click', e => e.stopPropagation());
-    }
-
-    // --------------------------------------------------------
-    // RESIZE & DRAG
-    // --------------------------------------------------------
-
-    function _initResizeHandles(thead) {
-        thead.querySelectorAll('.resize-handle').forEach(handle => {
-            handle.addEventListener('mousedown', (e) => {
-                e.preventDefault(); e.stopPropagation();
-                isResizing = true;
-                const th = handle.closest('th');
-                const colKey = handle.dataset.col;
-                const startX = e.pageX;
-                const startWidth = th.offsetWidth;
-                const table = document.getElementById('searchTable');
-                table.classList.add('resizable');
-                thead.querySelectorAll('th[data-col]').forEach(t => {
-                    if (!t.style.width) t.style.width = t.offsetWidth + 'px';
-                });
-
-                function onMove(e) {
-                    const minW = colKey === 'rank' ? 16 : 50;
-                    const newW = Math.max(minW, startWidth + e.pageX - startX);
-                    th.style.width = newW + 'px';
-                    state.columnWidths[colKey] = newW;
-                }
-                function onUp() {
-                    document.removeEventListener('mousemove', onMove);
-                    document.removeEventListener('mouseup', onUp);
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
-                    _saveColumnWidths();
-                    setTimeout(() => { isResizing = false; }, 0);
-                }
-                document.body.style.cursor = 'col-resize';
-                document.body.style.userSelect = 'none';
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
-            });
-        });
-    }
-
-    function _initColumnDrag(thead) {
-        let dragColKey = null;
-        const table = thead.closest('table');
-
-        thead.querySelectorAll('th[data-col]').forEach(th => {
-            th.addEventListener('dragstart', (e) => {
-                if (e.target.closest('.resize-handle')) { e.preventDefault(); return; }
-                dragColKey = th.dataset.col;
-
-                // Styled ghost element for the drag cursor
-                const labelText = th.querySelector('.th-label')?.textContent?.trim() || th.dataset.col;
-                const ghost = document.createElement('div');
-                ghost.className = 'col-drag-ghost';
-                ghost.innerHTML = `<span class="col-drag-ghost-icon">⠿</span><span>${labelText}</span>`;
-                document.body.appendChild(ghost);
-                e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                requestAnimationFrame(() => ghost.remove());
-
-                th.classList.add('col-drag-source');
-                table?.classList.add('col-drag-active');
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', dragColKey);
-            });
-
-            th.addEventListener('dragend', () => {
-                dragColKey = null;
-                table?.classList.remove('col-drag-active');
-                thead.querySelectorAll('th').forEach(t => t.classList.remove('col-drag-source', 'drop-before', 'drop-after'));
-            });
-
-            th.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                if (!dragColKey || th.dataset.col === dragColKey) return;
-                const rect = th.getBoundingClientRect();
-                const insertAfter = e.clientX > rect.left + rect.width / 2;
-                thead.querySelectorAll('th').forEach(t => t.classList.remove('drop-before', 'drop-after'));
-                th.classList.add(insertAfter ? 'drop-after' : 'drop-before');
-            });
-
-            th.addEventListener('dragleave', (e) => {
-                if (!th.contains(e.relatedTarget)) {
-                    th.classList.remove('drop-before', 'drop-after');
-                }
-            });
-
-            th.addEventListener('drop', (e) => {
-                e.preventDefault();
-                const insertAfter = th.classList.contains('drop-after');
-                table?.classList.remove('col-drag-active');
-                thead.querySelectorAll('th').forEach(t => t.classList.remove('col-drag-source', 'drop-before', 'drop-after'));
-
-                const fromKey = e.dataTransfer.getData('text/plain');
-                const toKey = th.dataset.col;
-                if (!fromKey || fromKey === toKey) return;
-
-                const keys = _getOrderedVisibleCols().map(c => c.key);
-                const fi = keys.indexOf(fromKey);
-                if (fi === -1) return;
-                keys.splice(fi, 1);
-                const newTi = keys.indexOf(toKey);
-                if (newTi === -1) return;
-                keys.splice(insertAfter ? newTi + 1 : newTi, 0, fromKey);
-
-                state.columnOrder = keys;
-                _saveColumnOrder();
-                _renderTable();
-
-                // Flash the newly placed column after re-render
-                setTimeout(() => {
-                    const landed = document.querySelector(`th[data-col="${fromKey}"]`);
-                    if (landed) {
-                        landed.classList.add('drop-flash');
-                        landed.addEventListener('animationend', () => landed.classList.remove('drop-flash'), { once: true });
-                    }
-                }, 16);
-            });
-        });
     }
 
     // --------------------------------------------------------
