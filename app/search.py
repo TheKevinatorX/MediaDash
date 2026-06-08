@@ -6,20 +6,15 @@ import re
 import time
 import logging
 import requests
-from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, jsonify, request
-from plexapi.server import PlexServer
-from plexapi.exceptions import NotFound, Unauthorized
+from plexapi.exceptions import Unauthorized
 
 import shared as _shared
 from shared import (
-    cache, enrichment, get_plex, with_plex_retry,
-    PLEX_URL, PLEX_TOKEN,
+    cache, enrichment, with_plex_retry,
     format_bytes, format_duration_short, format_date, format_channels,
-    PRIO_BROWSE_MOVIE, PRIO_BROWSE_SHOW, PRIO_EPISODE,
     sort_key_fn, _libraries_from_cache, _libraries_from_plex,
-    fetch_movies_with_streams as _fetch_movies_with_streams,
 )
 
 search_bp = Blueprint('search', __name__)
@@ -328,64 +323,6 @@ def _merge_episode_meta(items, episode_meta, progress_fn=None):
         if progress_fn and ((i + 1) % 10 == 0 or i + 1 == total):
             progress_fn(i + 1, total)
 
-# ============================================================
-# BACKGROUND WORKERS
-# ============================================================
-
-INITIAL_BATCH_SIZE = 100
-
-
-# BACKGROUND: FETCH EPISODE METADATA AND MERGE INTO CACHED SHOWS
-def _episode_enrichment_worker(cache_key, library_title, plex_url, plex_token):
-    try:
-        bg_plex = PlexServer(plex_url, plex_token, timeout=120)
-        section = bg_plex.library.section(library_title)
-        enrichment.update_progress(cache_key, 0, 0, 'Fetching episode data from Plex…')
-        episode_meta = fetch_episode_metadata(section)
-        cached = cache.get(cache_key) or cache.get_stale(cache_key)
-        if cached:
-            items = list(cached['items'])  # SHALLOW COPY TO AVOID MUTATION DURING ITERATION
-            total = len(items)
-            enrichment.update_progress(cache_key, 0, total, f'Fetching {total:,} shows from Plex…')
-
-            def _on_progress(current, t):
-                enrichment.update_progress(
-                    cache_key, current, t,
-                    f'Computing sizes & season data… ({current:,}/{t:,} shows)'
-                )
-
-            _merge_episode_meta(items, episode_meta, progress_fn=_on_progress)
-            cache.set(cache_key, items, cached['type'])
-            fetch_logger.info(f"Episode enrichment complete for '{library_title}': merged into {total} shows")
-    except Exception as e:
-        fetch_logger.error(f"Episode enrichment worker failed for '{library_title}': {e}")
-
-
-# BACKGROUND: FETCH ALL MOVIES FOR A LIBRARY (PROGRESSIVE MODE COMPLETION)
-def _full_fetch_worker(cache_key, library_title, library_type, plex_url, plex_token):
-    try:
-        bg_plex = PlexServer(plex_url, plex_token, timeout=120)
-        section = bg_plex.library.section(library_title)
-        extractor = EXTRACTORS.get(library_type)
-        if not extractor:
-            return
-        enrichment.update_progress(cache_key, 0, 0, 'Fetching from Plex…')
-        items = []
-        errors = 0
-        raw_items = _fetch_movies_with_streams(section) if library_type == 'movie' else section.all()
-        total = len(raw_items)
-        for i, item in enumerate(raw_items):
-            try:
-                items.append(extractor(item))
-            except Exception as e:
-                errors += 1
-                fetch_logger.error(f"Failed to extract '{getattr(item, 'title', '?')}': {e}")
-            if (i + 1) % 100 == 0 or i + 1 == total:
-                enrichment.update_progress(cache_key, i + 1, total, f'Processing {total:,} {library_type}s…')
-        cache.set(cache_key, items, library_type)
-        fetch_logger.info(f"Full fetch complete for '{library_title}': {len(items)} items ({errors} errors)")
-    except Exception as e:
-        fetch_logger.error(f"Full fetch worker failed for '{library_title}': {e}")
 
 # ============================================================
 # FETCH WITH CACHE
@@ -453,76 +390,20 @@ def _short_duration_display_items(items):
     return display_items
 
 
-# FETCH LIBRARY ITEMS FROM PLEX OR RETURN CACHED COPY
-# CACHE KEYS ARE PREFIXED WITH "search:" TO AVOID COLLISION WITH NAMING DATA
-def fetch_library_items(plex, title, library_type, progressive=False, silent=True):
+# RETURN CACHED LIBRARY ITEMS — NO PLEX CONTACT. Sync is the only refresh path.
+def fetch_library_items(title, library_type):
     cache_key = f'search:{title}'
-    # TRY FRESH CACHE FIRST, THEN FALL BACK TO STALE DATA WITH BACKGROUND REFRESH
     cached = cache.get(cache_key) or cache.get_stale(cache_key)
-    if cached is not None:
-        # Cached data is display-ready local data. Do not contact Plex or start
-        # background enrichment during navigation; Sync is the explicit refresh path.
-        enriched = True
-        is_stale = cached.get('is_stale', False)
-        fetch_logger.info(
-            f"Returning {len(cached['items'])} cached search items for '{title}' "
-            f"(stale={is_stale}, user-sync required for Plex refresh)"
-        )
-        return _short_duration_display_items(cached['items']), cached['type'], enriched
+    if cached is None:
+        fetch_logger.info(f"Cold search cache for '{title}' — no sync has run yet")
+        return [], library_type, False
 
-    fetch_logger.info(f"Fetching search library '{title}' (type={library_type}, progressive={progressive})")
-    start = time.time()
-
-    section = plex.library.section(title)
-    extractor = EXTRACTORS.get(library_type)
-    if not extractor:
-        return [], library_type, True
-
-    episode_meta = None
-    enriched = True
-
-    if library_type == 'movie' and progressive:
-        raw_items = _fetch_movies_with_streams(section, maxresults=INITIAL_BATCH_SIZE)
-        enriched = False
-    elif library_type == 'show' and progressive:
-        raw_items = section.all()
-        enriched = False  # EPISODE METADATA FETCHED IN BACKGROUND
-    elif library_type == 'show':
-        # PARALLEL FETCH: SHOW LIST + EPISODE METADATA
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            future_items = pool.submit(section.all)
-            future_meta = pool.submit(fetch_episode_metadata, section)
-            raw_items = future_items.result()
-            episode_meta = future_meta.result()
-    else:
-        raw_items = _fetch_movies_with_streams(section)
-
-    items = []
-    errors = 0
-    for item in raw_items:
-        try:
-            items.append(extractor(item))
-        except Exception as e:
-            errors += 1
-            fetch_logger.error(f"Failed to extract '{getattr(item, 'title', '?')}': {e}")
-
-    if library_type == 'show' and episode_meta:
-        _merge_episode_meta(items, episode_meta)
-
-    elapsed = time.time() - start
-    fetch_logger.info(f"Fetched {len(items)} search items for '{title}' in {elapsed:.1f}s ({errors} errors)")
-
-    cache.set(cache_key, items, library_type)
-
-    if not enriched:
-        if library_type == 'movie':
-            enrichment.start(cache_key, _full_fetch_worker,
-                (cache_key, title, library_type, PLEX_URL, PLEX_TOKEN), priority=PRIO_BROWSE_MOVIE, silent=silent)
-        else:
-            enrichment.start(cache_key, _episode_enrichment_worker,
-                (cache_key, title, PLEX_URL, PLEX_TOKEN), priority=PRIO_EPISODE, silent=silent)
-
-    return items, library_type, enriched
+    is_stale = cached.get('is_stale', False)
+    fetch_logger.info(
+        f"Returning {len(cached['items'])} cached search items for '{title}' "
+        f"(stale={is_stale}, run Sync to refresh from Plex)"
+    )
+    return _short_duration_display_items(cached['items']), cached['type'], True
 
 # ============================================================
 # BLUEPRINT ROUTES
@@ -556,129 +437,47 @@ def get_libraries():
 def get_library(title):
     cache_key = f'search:{title}'
     fetch_all = request.args.get('all', '').lower() == 'true'
-    user_sync = request.args.get('sync') == '1'
 
-    # FAST PATH: SERVE DIRECTLY FROM CACHE — NO PLEX CONNECTION REQUIRED
-    if not user_sync:
-        cached = cache.get_stale(cache_key)
-        if cached is not None and cached.get('type') in EXTRACTORS:
-            lib_type = cached['type']
-            items = _short_duration_display_items(cached['items'])
-
-            # Cached data is display-ready. Never start background enrichment during
-            # navigation; Sync is the explicit refresh path.
-            enriched = True
-            cache_age = round(time.time() - cached['ts'])
-
-            if fetch_all:
-                return jsonify({
-                    'items': items, 'total': len(items), 'page': 1,
-                    'perPage': len(items), 'totalPages': 1,
-                    'libraryType': lib_type, 'libraryTitle': title,
-                    'enriched': enriched, 'enrichmentRunning': False, 'cacheAge': cache_age,
-                })
-
-            search = request.args.get('search', '').strip()
-            sort_by = request.args.get('sort', None)
-            sort_dir = request.args.get('dir', 'asc')
-            try:
-                page = max(1, int(request.args.get('page', 1)))
-            except (ValueError, TypeError):
-                page = 1
-            try:
-                per_page = min(100, max(10, int(request.args.get('per_page', 25))))
-            except (ValueError, TypeError):
-                per_page = 25
-
-            result = apply_table_operations(items, search, sort_by, sort_dir, page, per_page)
-            result['libraryType'] = lib_type
-            result['libraryTitle'] = title
-            result['enriched'] = enriched
-            result['enrichmentRunning'] = False
-            result['cacheAge'] = cache_age
-            return jsonify(result)
-
-        # TRULY COLD — NO DATA AND NO SYNC REQUESTED. Tell the client whether a
-        # startup/sync worker is already running so it knows whether to poll.
+    cached = cache.get_stale(cache_key)
+    if cached is None or cached.get('type') not in EXTRACTORS:
         return jsonify({
             'items': [], 'total': 0, 'page': 1, 'perPage': 0, 'totalPages': 1,
             'libraryType': None, 'libraryTitle': title,
-            'enriched': False, 'enrichmentRunning': enrichment.is_running(cache_key), 'cacheAge': None,
+            'enriched': False, 'enrichmentRunning': False, 'cacheAge': None,
+            'needsSync': True,
         })
 
-    # COLD/SYNC PATH: connect to Plex (cache empty or user-triggered resync)
+    lib_type = cached['type']
+    items = _short_duration_display_items(cached['items'])
+    cache_age = round(time.time() - cached['ts'])
+
+    if fetch_all:
+        return jsonify({
+            'items': items, 'total': len(items), 'page': 1,
+            'perPage': len(items), 'totalPages': 1,
+            'libraryType': lib_type, 'libraryTitle': title,
+            'enriched': True, 'enrichmentRunning': False, 'cacheAge': cache_age,
+        })
+
+    search = request.args.get('search', '').strip()
+    sort_by = request.args.get('sort', None)
+    sort_dir = request.args.get('dir', 'asc')
     try:
-        def _fetch(plex):
-            try:
-                section = plex.library.section(title)
-            except NotFound:
-                return jsonify({'error': f"Library '{title}' not found"}), 404
+        page = max(1, int(request.args.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        per_page = min(100, max(10, int(request.args.get('per_page', 25))))
+    except (ValueError, TypeError):
+        per_page = 25
 
-            if section.type not in EXTRACTORS:
-                return jsonify({'error': f"Library type '{section.type}' is not supported"}), 400
-
-            fetch_all = request.args.get('all', '').lower() == 'true'
-            user_sync = request.args.get('sync') == '1'
-
-            # CACHE_REFRESH PRE-STARTS A BG TASK FOR RESYNCS — RETURN EMPTY SO ENRICHMENT POLLING DELIVERS DATA
-            cache_key = f'search:{title}'
-            if user_sync and enrichment.is_running(cache_key) and not (cache.get(cache_key) or cache.get_stale(cache_key)):
-                lib_type = section.type
-                return jsonify({
-                    'items': [], 'total': 0, 'page': 1, 'perPage': 0, 'totalPages': 1,
-                    'libraryType': lib_type, 'libraryTitle': title,
-                    'enriched': False, 'enrichmentRunning': True, 'cacheAge': None,
-                })
-
-            items, lib_type, enriched = fetch_library_items(plex, title, section.type, progressive=fetch_all, silent=not user_sync)
-
-            # GET CACHE AGE FOR THIS LIBRARY
-            _search_entry = cache.get(f'search:{title}') or cache.get_stale(f'search:{title}')
-            cache_age = round(time.time() - _search_entry['ts']) if _search_entry else None
-            enrichment_running = enrichment.is_running(cache_key)
-
-            if fetch_all:
-                return jsonify({
-                    'items': items,
-                    'total': len(items),
-                    'page': 1,
-                    'perPage': len(items),
-                    'totalPages': 1,
-                    'libraryType': lib_type,
-                    'libraryTitle': title,
-                    'enriched': enriched,
-                    'enrichmentRunning': enrichment_running,
-                    'cacheAge': cache_age,
-                })
-
-            search = request.args.get('search', '').strip()
-            sort_by = request.args.get('sort', None)
-            sort_dir = request.args.get('dir', 'asc')
-
-            try:
-                page = max(1, int(request.args.get('page', 1)))
-            except (ValueError, TypeError):
-                page = 1
-            try:
-                per_page = min(100, max(10, int(request.args.get('per_page', 25))))
-            except (ValueError, TypeError):
-                per_page = 25
-
-            result = apply_table_operations(items, search, sort_by, sort_dir, page, per_page)
-            result['libraryType'] = lib_type
-            result['libraryTitle'] = title
-            result['enriched'] = enriched
-            result['enrichmentRunning'] = enrichment_running
-            result['cacheAge'] = cache_age
-            return jsonify(result)
-
-        return with_plex_retry(_fetch)
-
-    except Unauthorized:
-        return jsonify({'error': 'Authentication failed'}), 401
-    except Exception as e:
-        api_logger.error(f"Error fetching search library '{title}': {e}")
-        return jsonify({'error': str(e)}), 500
+    result = apply_table_operations(items, search, sort_by, sort_dir, page, per_page)
+    result['libraryType'] = lib_type
+    result['libraryTitle'] = title
+    result['enriched'] = True
+    result['enrichmentRunning'] = False
+    result['cacheAge'] = cache_age
+    return jsonify(result)
 
 
 # CHECK BACKGROUND ENRICHMENT STATUS AND RETURN ENRICHED DATA WHEN COMPLETE

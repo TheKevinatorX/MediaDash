@@ -18,8 +18,6 @@ from shared import (
     save_user_settings,
     get_user_settings,
     APP_START_TIME,
-    PLEX_URL,
-    PLEX_TOKEN,
     MOVIE_LABEL,
     SHOW_LABEL,
     format_bytes,
@@ -112,62 +110,6 @@ _startup_auto_sync()
 # ============================================================
 # HOME SUMMARY HELPERS
 # ============================================================
-
-# AGGREGATE MOVIE STATS FROM A PLEX MOVIE SECTION
-def _summarize_movies(section):
-    movies = section.all()
-    total_size = 0
-    total_duration = 0
-    for m in movies:
-        try:
-            for media in m.media:
-                for part in media.parts:
-                    total_size += part.size or 0
-        except Exception:
-            pass
-        total_duration += m.duration or 0
-    return {
-        'count': len(movies),
-        'totalSize': total_size,
-        'totalSizeFormatted': format_bytes(total_size),
-        'totalDuration': total_duration,
-        'totalDurationFormatted': format_duration(total_duration),
-    }
-
-
-# AGGREGATE SHOW/SEASON/EPISODE STATS FROM A PLEX SHOW SECTION
-def _summarize_shows(section):
-    shows = section.all()
-    episodes = section.searchEpisodes()
-
-    total_size = 0
-    total_duration = 0
-    for ep in episodes:
-        try:
-            for media in ep.media:
-                for part in media.parts:
-                    total_size += part.size or 0
-        except Exception:
-            pass
-        total_duration += ep.duration or 0
-
-    season_count = 0
-    for show in shows:
-        try:
-            season_count += sum(1 for s in show.seasons() if s.seasonNumber > 0)
-        except Exception:
-            pass
-
-    return {
-        'showCount': len(shows),
-        'seasonCount': season_count,
-        'episodeCount': len(episodes),
-        'totalSize': total_size,
-        'totalSizeFormatted': format_bytes(total_size),
-        'totalDuration': total_duration,
-        'totalDurationFormatted': format_duration(total_duration),
-    }
-
 
 # CHECK NAMING CACHE FOR HEALTH STATS — SERVES STALE DATA WHEN FRESH ENTRY IS UNAVAILABLE
 def _compute_naming_health(library_title):
@@ -296,39 +238,6 @@ def _build_summary_from_search_cache():
     return {'totals': totals, 'libraries': libraries, 'labels': {'movie': MOVIE_LABEL, 'show': SHOW_LABEL}}
 
 
-# BACKGROUND WORKER: FETCH BROWSE LIBRARY (PROGRESSIVE OR FULL) — KEEPS HOME COLD-PATH AND /API/WARM IN SYNC
-def _make_search_worker(progressive, label):
-    def _worker(cache_key, library_title, library_type):
-        try:
-            from plexapi.server import PlexServer as _PlexServer
-            from search import fetch_library_items
-            bg_plex = _PlexServer(_shared.PLEX_URL, _shared.PLEX_TOKEN, timeout=120)
-            fetch_library_items(bg_plex, library_title, library_type, progressive=progressive)
-            logger.info(f"{label} complete for '{library_title}'")
-        except Exception as e:
-            logger.error(f"{label} failed for '{library_title}': {e}")
-    return _worker
-
-
-_search_fetch_worker = _make_search_worker(progressive=True, label='Background search fetch')
-_warm_search_worker = _make_search_worker(progressive=False, label='Warm search')
-
-
-# START NAMING WORKER IF NOT ALREADY RUNNING — USED BY HOME SUMMARY ROUTES
-def _ensure_naming_worker(library_title, library_type):
-    naming_key = f'naming:{library_title}'
-    if enrichment.is_running(naming_key):
-        return
-    from naming import _naming_full_fetch_worker
-    enrichment.start(
-        naming_key,
-        _naming_full_fetch_worker,
-        (naming_key, library_title, library_type, PLEX_URL, PLEX_TOKEN),
-        priority=PRIO_NAMING,
-        silent=False,
-    )
-
-
 @app.route('/api/home/summary')
 def home_summary():
     # RETURN CACHED SUMMARY IF FRESH
@@ -362,54 +271,13 @@ def home_summary():
         lib_entry = {'title': section.title, 'type': lib_type}
 
         try:
-            # FAST PATH: BUILD STATS FROM BROWSE CACHE (NO PLEX API CALL)
             stats = _summarize_from_cache(section.title, lib_type)
-
             if stats is None:
-                # COLD CACHE: FALL BACK TO PLEX API (FIRST-EVER LOAD ONLY)
-                logger.info(f"Search cache cold for '{section.title}', falling back to Plex API")
-                if lib_type == 'movie':
-                    stats = _summarize_movies(section)
-                else:
-                    stats = _summarize_shows(section)
-                # KICK OFF BACKGROUND BROWSE FETCH SO NEXT LOAD IS INSTANT
-                search_key = f'search:{section.title}'
-                if not enrichment.is_running(search_key):
-                    p = PRIO_BROWSE_MOVIE if lib_type == 'movie' else PRIO_BROWSE_SHOW
-                    enrichment.start(
-                        search_key,
-                        _search_fetch_worker,
-                        (search_key, section.title, lib_type),
-                        priority=p,
-                        silent=False,
-                    )
-
-            lib_entry.update(stats)
-            _accumulate_totals(totals, lib_type, stats)
-
-            if lib_type == 'show':
-                # WARM CACHE BUT UNENRICHED — START EPISODE ENRICHMENT SO SIZE/DURATION POPULATE ON NEXT REFRESH
-                if stats.get('totalSize', 0) == 0 and stats.get('episodeCount', 0) > 0:
-                    search_key = f'search:{section.title}'
-                    if not enrichment.is_running(search_key) and not enrichment.is_complete(search_key):
-                        logger.info(f"Show cache unenriched for '{section.title}', starting episode enrichment")
-                        from search import _episode_enrichment_worker
-                        enrichment.start(
-                            search_key,
-                            _episode_enrichment_worker,
-                            (search_key, section.title, PLEX_URL, PLEX_TOKEN),
-                            priority=PRIO_EPISODE,
-                            silent=True,
-                        )
-
+                lib_entry['loading'] = True
+            else:
+                lib_entry.update(stats)
+                _accumulate_totals(totals, lib_type, stats)
             lib_entry['namingHealth'] = _compute_naming_health(section.title)
-
-            # START NAMING WORKER FOR ABSENT OR STALE NAMING CACHE
-            naming_raw = cache.get_stale(f'naming:{section.title}')
-            naming_stale = naming_raw and naming_raw.get('is_stale', False)
-            if lib_entry['namingHealth'] is None or naming_stale:
-                _ensure_naming_worker(section.title, lib_type)
-
         except Exception as e:
             logger.error(f'Failed to summarize library {section.title!r}: {e}')
             lib_entry['error'] = str(e)
@@ -439,7 +307,6 @@ def _build_quicksummary_lib_entry(library_title, lib_type):
     Returns (lib_entry, stats) where stats is None when the cache miss
     triggered a background fetch (lib_entry['loading'] will be True).
     """
-    search_key = f'search:{library_title}'
     lib_entry = {'title': library_title, 'type': lib_type}
     stats = _summarize_from_cache(library_title, lib_type)
     if stats is not None:
@@ -447,11 +314,6 @@ def _build_quicksummary_lib_entry(library_title, lib_type):
         lib_entry['loading'] = False
     else:
         lib_entry['loading'] = True
-        if not enrichment.is_running(search_key):
-            p = PRIO_BROWSE_MOVIE if lib_type == 'movie' else PRIO_BROWSE_SHOW
-            enrichment.start(search_key, _search_fetch_worker,
-                             (search_key, library_title, lib_type),
-                             priority=p, silent=False)
     lib_entry['namingHealth'] = _compute_naming_health(library_title)
     return (lib_entry, stats)
 
