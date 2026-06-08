@@ -14,13 +14,10 @@ from threading import Lock, Thread
 
 # ============================================================
 # PRIORITY LEVELS — lower number = processed first
-# Mirrors the nav bar order: Home → Search → Naming → Sizes
+# Only one task type remains now that sync is unified into a single pass
 # ============================================================
 
-PRIO_BROWSE_MOVIE = 0   # movie libraries: fast + feeds Home stats immediately
-PRIO_BROWSE_SHOW  = 1   # show libraries: feeds Home stats (submitted in Plex section order)
-PRIO_NAMING       = 2   # Naming page data for all libraries
-PRIO_EPISODE      = 3   # episode-level size/duration enrichment (Sizes page)
+PRIO_SYNC = 0   # the single unified Plex sync pass
 
 
 # PRIORITY-QUEUE BACKGROUND TASK RUNNER

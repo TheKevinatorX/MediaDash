@@ -841,8 +841,8 @@ const SizeDash = (() => {
     // DATA FETCHING
     // --------------------------------------------------------
 
-    async function _fetchLibrary(title, sync = false) {
-        if (dataCache[title] && dataCache[title].enriched && !sync) {
+    async function _fetchLibrary(title) {
+        if (dataCache[title] && dataCache[title].enriched) {
             state.allItems = dataCache[title].items;
             return;
         }
@@ -852,9 +852,9 @@ const SizeDash = (() => {
         _hideEmpty();
 
         try {
-            const url = `/size/library/${encodeURIComponent(title)}?all=true${sync ? '&sync=1' : ''}`;
+            const url = `/size/library/${encodeURIComponent(title)}?all=true`;
             const data = await api(url);
-            dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null };
+            dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null, needsSync: data.needsSync ?? false };
             _updateSeasonTabCount();
             state.allItems = data.items;
             _showLoading(false);
@@ -1070,6 +1070,7 @@ const SizeDash = (() => {
                     enriched: data.enriched,
                     enrichmentRunning: data.enrichmentRunning ?? false,
                     cacheAge: data.cacheAge ?? null,
+                    needsSync: data.needsSync ?? false,
                 };
                 _updateSeasonTabCount();
                 _updateSeasonAnalysisLib(lib.title, true, data.enriched, null);
@@ -1307,7 +1308,11 @@ const SizeDash = (() => {
 
         if (state.items.length === 0) {
             _hideTable();
-            _showEmpty(state.search ? 'No results match your search.' : 'This library is empty.');
+            if (dataCache[state.activeLibrary]?.needsSync) {
+                _showEmpty('No cached data for this library yet — click Sync (top right) to load it from Plex.');
+            } else {
+                _showEmpty(state.search ? 'No results match your search.' : 'This library is empty.');
+            }
             _renderPagination();
         } else {
             _renderTable();
@@ -2007,7 +2012,8 @@ const SizeDash = (() => {
 
     async function refreshActive() {
         if (state.activeLibrary && state.viewMode !== 'seasons') {
-            await _fetchLibrary(state.activeLibrary, true);
+            delete dataCache[state.activeLibrary];
+            await _fetchLibrary(state.activeLibrary);
             _applyView();
         }
     }

@@ -6,30 +6,17 @@ import logging
 import time
 
 from flask import Blueprint, jsonify, request
-from plexapi.exceptions import NotFound, Unauthorized
+from plexapi.exceptions import Unauthorized
 
 from shared import (
-    cache, enrichment, get_plex, with_plex_retry,
-    PLEX_URL, PLEX_TOKEN,
+    cache, enrichment, with_plex_retry,
     sort_key_fn, _libraries_from_cache, _libraries_from_plex,
-    PRIO_EPISODE,
 )
 
 SUPPORTED_LIBRARY_TYPES = ('movie', 'show')
 
 size_bp = Blueprint('size', __name__)
 api_logger = logging.getLogger('mediadash.size')
-
-
-def _search_cold_worker(cache_key, library_title, library_type):
-    try:
-        from plexapi.server import PlexServer as _PlexServer
-        from search import fetch_library_items
-        bg_plex = _PlexServer(PLEX_URL, PLEX_TOKEN, timeout=120)
-        fetch_library_items(bg_plex, library_title, library_type, progressive=False)
-        api_logger.info(f"Browse cold worker complete for '{library_title}'")
-    except Exception as e:
-        api_logger.error(f"Browse cold worker failed for '{library_title}': {e}")
 
 # ============================================================
 # PROJECTIONS (imported from calculations.py)
@@ -44,41 +31,20 @@ from calculations import (
 # ============================================================
 
 
-def _get_search_items(title, library_type, user_sync=False):
+def _get_search_items(title, library_type):
     cache_key = f'search:{title}'
     cached = cache.get(cache_key) or cache.get_stale(cache_key)
     if cached and cached.get('items'):
         items = cached['items']
         cache_age = round(time.time() - cached['ts'])
-
-        # FOR SHOW LIBRARIES: ONLY MARK ENRICHED WHEN EPISODE/SEASON DATA IS PRESENT.
-        # Only start enrichment on explicit user sync — never on page navigation.
         if library_type == 'show':
-            has_season_data = any(item.get('seasonSizes') for item in items)
-            if has_season_data:
-                enriched = True
-            else:
-                enriched = False
-                if user_sync and not enrichment.is_running(cache_key):
-                    from search import _episode_enrichment_worker
-                    enrichment.start(
-                        cache_key, _episode_enrichment_worker,
-                        (cache_key, title, PLEX_URL, PLEX_TOKEN),
-                        priority=PRIO_EPISODE, silent=False,
-                    )
-                    api_logger.info(f"Show cache lacks season data for '{title}', episode enrichment started")
+            enriched = any(item.get('seasonSizes') for item in items)
         else:
             enriched = True
+        return items, enriched, cache_age, False
 
-        return items, enriched, cache_age, enrichment.is_running(cache_key)
-
-    # CACHE MISS — ONLY START WORKER ON EXPLICIT SYNC, NEVER ON PAGE NAVIGATION
-    if user_sync and not enrichment.is_running(cache_key):
-        enrichment.start(cache_key, _search_cold_worker, (cache_key, title, library_type), silent=False)
-        api_logger.info(f"Cold search cache for '{title}', sync-triggered worker started — returning empty")
-    else:
-        api_logger.info(f"Cold search cache for '{title}', no sync requested — returning empty")
-    return [], False, 0, enrichment.is_running(cache_key)
+    api_logger.info(f"Cold search cache for '{title}' — run Sync to populate")
+    return [], False, 0, False
 
 
 # ============================================================
@@ -105,11 +71,11 @@ def get_libraries():
         return jsonify({'error': f'Failed to connect to Plex: {e}'}), 500
 
 
-def _library_response(title, library_type, user_sync=False):
+def _library_response(title, library_type):
     if library_type not in PROJECTORS:
         return jsonify({'error': f"Library type '{library_type}' is not supported"}), 400
 
-    items, enriched, cache_age, enrichment_running = _get_search_items(title, library_type, user_sync=user_sync)
+    items, enriched, cache_age, enrichment_running = _get_search_items(title, library_type)
 
     size_key = SIZE_SORT_KEY[library_type]
     items_sorted = sorted(items, key=lambda x: x.get(size_key, 0) or 0, reverse=True)
@@ -176,31 +142,17 @@ def _library_response(title, library_type, user_sync=False):
 
 @size_bp.route('/library/<path:title>')
 def get_library(title):
-    try:
-        user_sync = request.args.get('sync') == '1'
+    # GET LIBRARY TYPE FROM CACHE AND RESPOND WITHOUT TOUCHING PLEX
+    search_entry = cache.get(f'search:{title}') or cache.get_stale(f'search:{title}')
+    if search_entry:
+        return _library_response(title, search_entry.get('type', 'movie'))
 
-        # FAST PATH: GET LIBRARY TYPE FROM CACHE AND RESPOND WITHOUT TOUCHING PLEX
-        search_entry = cache.get(f'search:{title}') or cache.get_stale(f'search:{title}')
-        if search_entry:
-            return _library_response(title, search_entry.get('type', 'movie'), user_sync=user_sync)
-
-        # COLD CACHE — NEED PLEX ONLY TO DISCOVER THE LIBRARY TYPE
-        def _fetch(plex):
-            try:
-                section = plex.library.section(title)
-            except NotFound:
-                return jsonify({'error': f"Library '{title}' not found"}), 404
-            if section.type not in PROJECTORS:
-                return jsonify({'error': f"Library type '{section.type}' is not supported"}), 400
-            return _library_response(title, section.type, user_sync=user_sync)
-
-        return with_plex_retry(_fetch)
-
-    except Unauthorized:
-        return jsonify({'error': 'Authentication failed'}), 401
-    except Exception as e:
-        api_logger.error(f"Error fetching size library '{title}': {e}")
-        return jsonify({'error': str(e)}), 500
+    return jsonify({
+        'items': [], 'total': 0, 'page': 1, 'perPage': 0, 'totalPages': 1,
+        'libraryType': None, 'libraryTitle': title,
+        'enriched': False, 'enrichmentRunning': False, 'cacheAge': None,
+        'needsSync': True,
+    })
 
 
 @size_bp.route('/library/<path:title>/enrichment')

@@ -682,17 +682,7 @@ const HomeDash = (() => {
             btn.title = 'Refreshing\u2026';
             if (overlay) overlay.classList.add('sync-overlay--visible');
             try {
-                await api('/api/cache/refresh', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({}),
-                });
-                // RESTART ALL BACKGROUND WORKERS (NON-SILENT SO PROGRESS HUB SHOWS ACTIVITY)
-                await fetch('/api/warm', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ silent: false }),
-                }).catch(() => {});
+                await api('/api/sync', { method: 'POST' });
                 // INVALIDATE JS-SIDE CACHES IN ALL PAGE MODULES
                 for (const m of [
                     typeof SearchDash !== 'undefined' ? SearchDash : null,

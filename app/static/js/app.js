@@ -80,7 +80,7 @@ function initHamburgerMenu() {
 // ============================================================
 
 // Cache warming is intentionally user-triggered only.
-// The Sync button calls /api/cache/refresh + /api/warm explicitly.
+// The Sync button calls /api/sync explicitly.
 
 // ============================================================
 // SPA ROUTER — HASH-BASED PAGE SWITCHER

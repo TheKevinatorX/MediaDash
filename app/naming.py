@@ -7,20 +7,15 @@ import time
 import logging
 import unicodedata
 from pathlib import PurePosixPath
-from concurrent.futures import ThreadPoolExecutor
-
-from flask import Blueprint, jsonify, request
-from plexapi.server import PlexServer
-from plexapi.exceptions import NotFound, Unauthorized
+from flask import Blueprint, jsonify
+from plexapi.exceptions import Unauthorized
 
 import shared as _shared
 
 from shared import (
     cache, enrichment, get_plex, with_plex_retry,
-    PLEX_URL, PLEX_TOKEN, EXCLUDED_SHOWS,
-    PRIO_NAMING,
+    EXCLUDED_SHOWS,
     _libraries_from_cache, _libraries_from_plex,
-    fetch_movies_with_streams,
 )
 
 SUPPORTED_LIBRARY_TYPES = ('movie', 'show')
@@ -47,95 +42,6 @@ from name_analysis import (
 # ============================================================
 # FETCH HELPERS
 # ============================================================
-
-INITIAL_BATCH_SIZE = 100
-
-
-# FETCH AND ANALYZE ALL MOVIES IN A SECTION
-def _fetch_all_movies(section, max_results=None):
-    movies = fetch_movies_with_streams(section, maxresults=max_results)
-    items = []
-    errors = 0
-    for movie in movies:
-        try:
-            items.append(extract_movie_naming(movie))
-        except Exception as e:
-            errors += 1
-            fetch_logger.error(f"Failed to extract naming for '{getattr(movie, 'title', '?')}': {e}")
-    fetch_logger.info(f"Analyzed {len(movies)} movies ({errors} errors)")
-    return items
-
-
-# FETCH AND ANALYZE ALL EPISODES IN A SECTION (PARALLELIZED)
-def _fetch_all_episodes(section, cache_key=None):
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        shows_future = executor.submit(section.all)
-        episodes_future = executor.submit(section.searchEpisodes)
-        shows = shows_future.result()
-        episodes = episodes_future.result()
-
-    show_year_map = {s.ratingKey: s.year for s in shows if s.ratingKey and s.year}
-    fetch_logger.info(f"Built show year map for {len(show_year_map)} shows")
-
-    total = len(episodes)
-    if cache_key:
-        enrichment.update_progress(cache_key, 0, total, f'Reviewing {total:,} episode names…')
-
-    items = []
-    errors = 0
-    for i, ep in enumerate(episodes):
-        try:
-            items.append(extract_episode_naming(ep, show_year_map))
-        except Exception as e:
-            errors += 1
-            fetch_logger.error(f"Failed to extract naming for episode: {e}")
-        if cache_key and ((i + 1) % 100 == 0 or i + 1 == total):
-            enrichment.update_progress(cache_key, i + 1, total, f'Reviewing {total:,} episode names…')
-
-    fetch_logger.info(f"Analyzed {len(items)} episodes ({errors} errors)")
-    return items
-
-
-# BACKGROUND: FULL NAMING ANALYSIS AFTER PROGRESSIVE INITIAL BATCH
-def _naming_full_fetch_worker(cache_key, library_title, library_type, plex_url, plex_token):
-    try:
-        bg_plex = PlexServer(plex_url, plex_token, timeout=120)
-        section = bg_plex.library.section(library_title)
-        enrichment.update_progress(cache_key, 0, 0, 'Fetching from Plex…')
-        if library_type == 'movie':
-            items = _fetch_all_movies(section)
-        elif library_type == 'show':
-            items = _fetch_all_episodes(section, cache_key=cache_key)
-        else:
-            items = []
-        cache.set(cache_key, items, library_type)
-        fetch_logger.info(f"Naming full fetch complete for '{library_title}': {len(items)} items")
-    except Exception as e:
-        fetch_logger.error(f"Naming full fetch failed for '{library_title}': {e}")
-
-
-# FETCH LIBRARY NAMING DATA WITH PROGRESSIVE LOADING SUPPORT
-# CACHE KEYS ARE PREFIXED WITH "naming:" TO AVOID COLLISION WITH BROWSE DATA
-def fetch_library_naming(plex, title, library_type, progressive=False, silent=True):
-    cache_key = f'naming:{title}'
-    # TRY FRESH CACHE FIRST, THEN FALL BACK TO STALE LOCAL DATA.
-    # Navigation must not contact Plex; Sync is the explicit refresh path.
-    cached = cache.get(cache_key) or cache.get_stale(cache_key)
-    if cached is not None:
-        is_stale = cached.get('is_stale', False)
-        enriched = True
-        fetch_logger.info(
-            f"Returning {len(cached['items'])} cached naming items for '{title}' "
-            f"(stale={is_stale}, user-sync required for Plex refresh)"
-        )
-        return cached['items'], cached['type'], enriched
-
-    # CACHE MISS — START BACKGROUND WORKER IMMEDIATELY AND RETURN EMPTY FOR FAST RESPONSE
-    if not enrichment.is_running(cache_key):
-        enrichment.start(cache_key, _naming_full_fetch_worker,
-            (cache_key, title, library_type, PLEX_URL, PLEX_TOKEN), priority=PRIO_NAMING, silent=silent)
-    fetch_logger.info(f"Cold naming cache for '{title}', background worker started — returning empty")
-    return [], library_type, False
 
 # ============================================================
 # BLUEPRINT ROUTES
@@ -195,55 +101,20 @@ def _naming_response(title, cache_key, cached):
 # FETCH NAMING ANALYSIS FOR A LIBRARY
 @naming_bp.route('/library/<path:title>')
 def get_library(title):
-    try:
-        cache_key = f'naming:{title}'
-        user_sync = request.args.get('sync') == '1'
+    cache_key = f'naming:{title}'
+    cached = cache.get(cache_key) or cache.get_stale(cache_key)
+    if cached and cached.get('items'):
+        return _naming_response(title, cache_key, cached)
 
-        # FAST PATH: NAMING CACHE WARM — RESPOND WITHOUT ANY PLEX CONNECTION
-        cached = cache.get(cache_key) or cache.get_stale(cache_key)
-        if cached and cached.get('items'):
-            return _naming_response(title, cache_key, cached)
-
-        # NAMING COLD — TRY BROWSE CACHE TO LEARN LIBRARY TYPE WITHOUT TOUCHING PLEX
-        search_entry = cache.get(f'search:{title}') or cache.get_stale(f'search:{title}')
-        if search_entry:
-            lib_type = search_entry.get('type', 'movie')
-            # Only start worker on explicit user sync — never on page navigation
-            if user_sync and not enrichment.is_running(cache_key):
-                enrichment.start(cache_key, _naming_full_fetch_worker,
-                    (cache_key, title, lib_type, PLEX_URL, PLEX_TOKEN), priority=PRIO_NAMING, silent=False)
-            api_logger.info(f"{title}: cold naming, type from search cache — returning empty")
-            return jsonify({
-                'items': [], 'libraryType': lib_type, 'libraryTitle': title,
-                'enriched': False, 'enrichmentRunning': enrichment.is_running(cache_key), 'cacheAge': None,
-            })
-
-        # BOTH CACHES COLD — NEED ONE PLEX CALL TO DISCOVER LIBRARY TYPE
-        def _fetch(plex):
-            try:
-                section = plex.library.section(title)
-            except NotFound:
-                return jsonify({'error': f"Library '{title}' not found"}), 404
-            lib_type = section.type
-            if lib_type not in ('movie', 'show'):
-                return jsonify({'error': f"Library type '{lib_type}' is not supported"}), 400
-            # Only start worker on explicit user sync — never on page navigation
-            if user_sync and not enrichment.is_running(cache_key):
-                enrichment.start(cache_key, _naming_full_fetch_worker,
-                    (cache_key, title, lib_type, PLEX_URL, PLEX_TOKEN), priority=PRIO_NAMING, silent=False)
-            api_logger.info(f"{title}: fully cold naming, type from Plex — returning empty")
-            return jsonify({
-                'items': [], 'libraryType': lib_type, 'libraryTitle': title,
-                'enriched': False, 'enrichmentRunning': enrichment.is_running(cache_key), 'cacheAge': None,
-            })
-
-        return with_plex_retry(_fetch)
-
-    except Unauthorized:
-        return jsonify({'error': 'Authentication failed'}), 401
-    except Exception as e:
-        api_logger.error(f"Error fetching naming library '{title}': {e}")
-        return jsonify({'error': str(e)}), 500
+    # COLD — LEARN LIBRARY TYPE FROM SEARCH CACHE IF AVAILABLE, NO PLEX CONTACT
+    search_entry = cache.get(f'search:{title}') or cache.get_stale(f'search:{title}')
+    lib_type = search_entry.get('type', 'movie') if search_entry else None
+    api_logger.info(f"{title}: naming cache cold — run Sync to populate")
+    return jsonify({
+        'items': [], 'libraryType': lib_type, 'libraryTitle': title,
+        'enriched': False, 'enrichmentRunning': False, 'cacheAge': None,
+        'needsSync': True,
+    })
 
 
 # POLL FOR BACKGROUND ENRICHMENT STATUS

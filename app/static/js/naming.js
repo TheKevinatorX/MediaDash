@@ -248,6 +248,7 @@ const NamingDash = (() => {
                 enriched: data.enriched,
                 enrichmentRunning: data.enrichmentRunning ?? false,
                 cacheAge: data.cacheAge ?? null,
+                needsSync: data.needsSync ?? false,
             };
             if (!data.enriched && data.enrichmentRunning) _silentEnrichmentPoll(title);
         } catch (err) {
@@ -360,15 +361,15 @@ const NamingDash = (() => {
     // DATA FETCHING
     // --------------------------------------------------------
 
-    async function _fetchLibrary(title, type, sync = false) {
-        if (dataCache[title] && dataCache[title].enriched && !sync) return;
+    async function _fetchLibrary(title, type) {
+        if (dataCache[title] && dataCache[title].enriched) return;
 
         _showLoading(true, 'Analyzing file names...');
         _hideError();
         _hideEmpty();
 
         try {
-            const url = `/naming/library/${encodeURIComponent(title)}${sync ? '?sync=1' : ''}`;
+            const url = `/naming/library/${encodeURIComponent(title)}`;
             const data = await api(url);
             const stats = _computeStats(data.items, data.libraryType);
             dataCache[title] = {
@@ -378,6 +379,7 @@ const NamingDash = (() => {
                 enriched: data.enriched,
                 enrichmentRunning: data.enrichmentRunning ?? false,
                 cacheAge: data.cacheAge ?? null,
+                needsSync: data.needsSync ?? false,
             };
             state.allItems = data.items;
             state.stats = stats;
@@ -536,7 +538,9 @@ const NamingDash = (() => {
 
         if (state.items.length === 0) {
             _hideTable();
-            if (state.statusFilter === 'ok' && !state.search) {
+            if (dataCache[state.activeLibrary]?.needsSync) {
+                _showEmpty('No cached data for this library yet — click Sync (top right) to load it from Plex.');
+            } else if (state.statusFilter === 'ok' && !state.search) {
                 _showEmpty('All items have naming issues.');
             } else if (state.statusFilter === 'issues' && !state.search && dataCache[state.activeLibrary]?.enriched) {
                 _showAllClear();
@@ -1476,7 +1480,8 @@ const NamingDash = (() => {
 
     async function refreshActive() {
         if (state.activeLibrary) {
-            await _fetchLibrary(state.activeLibrary, state.activeLibraryType, true);
+            delete dataCache[state.activeLibrary];
+            await _fetchLibrary(state.activeLibrary, state.activeLibraryType);
             _applyView();
         }
     }
