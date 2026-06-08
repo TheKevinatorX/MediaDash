@@ -28,6 +28,7 @@ const SizeDash = (() => {
         totalPages: 0,
         loading: false,
         expandedRow: null,
+        columnFilters: {},
         columnPickerOpen: false,
         enrichmentPolling: null,
         viewMode: 'shows',   // 'shows' | 'seasons'
@@ -37,6 +38,9 @@ const SizeDash = (() => {
 
     const dataCache = {};
     let isResizing = false;
+
+    // PENDING FILTER — SET BY navigateWithFilter(), CONSUMED ONCE BY _switchLibrary()
+    let _pendingFilter = null;
 
     // --------------------------------------------------------
     // COLUMN DEFINITIONS
@@ -328,6 +332,142 @@ const SizeDash = (() => {
         }
     }
 
+    // APPLY A FILTERSPEC (picklist/text/quick/function) TO STATE + UI — SHARED BY navigateWithFilter + _switchLibrary
+    function _applyFilterSpec(filterType, filterKey, filterValue) {
+        switch (filterType) {
+            case 'picklist':
+                state.columnFilters[filterKey] = new Set([filterValue]);
+                break;
+            case 'text':
+            case 'function':
+                state.columnFilters[filterKey] = filterValue;
+                break;
+            case 'quick': {
+                state.quickFilters[filterKey] = filterValue;
+                const el = document.getElementById(QF_IDS[filterKey]);
+                if (el) { el.value = filterValue; el.classList.add('active-filter'); }
+                break;
+            }
+        }
+    }
+
+    // --------------------------------------------------------
+    // COLUMN-HEADER FILTER DROPDOWNS
+    // --------------------------------------------------------
+
+    const FILTER_PLACEHOLDERS = {
+        title: 'Search title...', year: '4-digit year...', rating: 'e.g. 7.5',
+        resolution: 'e.g. 1080, 4k', fileSizeFormatted: 'e.g. 5.0 GB',
+        genres: 'Type a genre...', studio: 'Type a studio...', contentRating: 'e.g. PG-13, R',
+        videoCodec: 'e.g. h264, hevc', audioCodec: 'e.g. aac, ac3',
+        watchStatus: 'Watched, Unwatched...', showStatus: 'Returning, Airing...',
+        seasons: 'Number of seasons...',
+        episodes: 'Number of episodes...', totalSizeFormatted: 'e.g. 50.0 GB',
+    };
+
+    const PICKLIST_CANDIDATE_KEYS = new Set([
+        'resolution', 'dominantResolution', 'watchStatus', 'contentRating',
+        'container', 'videoCodec', 'audioCodec', 'showStatus',
+    ]);
+
+    function _getPicklistOptions(colKey) {
+        const cached = dataCache[state.activeLibrary];
+        if (!cached) return null;
+        const values = new Set();
+        for (const item of cached.items) {
+            const v = item[colKey];
+            if (v != null && v !== '') values.add(String(v));
+        }
+        if (values.size < 2 || values.size > 9) return null;
+        return [...values].sort();
+    }
+
+    function _toggleColumnFilter(btnEl, colKey) {
+        document.querySelectorAll('.col-filter-dropdown').forEach(d => d.remove());
+
+        const picklistOptions = PICKLIST_CANDIDATE_KEYS.has(colKey) ? _getPicklistOptions(colKey) : null;
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'col-filter-dropdown';
+
+        const th = btnEl.closest('th');
+        const rect = th.getBoundingClientRect();
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = `${rect.bottom + 4}px`;
+        dropdown.style.left = `${rect.left}px`;
+        dropdown.style.minWidth = `${Math.max(rect.width, 150)}px`;
+
+        if (picklistOptions) {
+            const currentSet = (state.columnFilters[colKey] instanceof Set) ? state.columnFilters[colKey] : new Set();
+            let optionsHTML = '';
+            for (const opt of picklistOptions) {
+                const checked = currentSet.has(opt) ? 'checked' : '';
+                optionsHTML += `<label class="col-filter-option"><input type="checkbox" value="${escapeHTML(opt)}" ${checked}><span>${escapeHTML(opt)}</span></label>`;
+            }
+            dropdown.innerHTML = `
+                <div class="col-filter-header">
+                    <span>Filter</span>
+                    <button class="col-filter-clear-btn" title="Clear">&times;</button>
+                </div>
+                <div class="col-filter-picklist">${optionsHTML}</div>
+            `;
+
+            document.body.appendChild(dropdown);
+
+            dropdown.querySelectorAll('.col-filter-option input').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    const selected = new Set(
+                        [...dropdown.querySelectorAll('.col-filter-option input:checked')].map(i => i.value)
+                    );
+                    if (selected.size > 0) state.columnFilters[colKey] = selected;
+                    else delete state.columnFilters[colKey];
+                    state.page = 1;
+                    state.expandedRow = null;
+                    _applyView();
+                });
+            });
+        } else {
+            const current = (typeof state.columnFilters[colKey] === 'string') ? state.columnFilters[colKey] : '';
+            const placeholder = FILTER_PLACEHOLDERS[colKey] || 'Type to filter...';
+            dropdown.innerHTML = `
+                <div class="col-filter-header">
+                    <span>Filter</span>
+                    <button class="col-filter-clear-btn" title="Clear">&times;</button>
+                </div>
+                <input type="text" class="col-filter-input" placeholder="${escapeHTML(placeholder)}" value="${escapeHTML(current)}" autofocus>
+            `;
+
+            document.body.appendChild(dropdown);
+
+            const input = dropdown.querySelector('.col-filter-input');
+            setTimeout(() => input.focus(), 0);
+
+            let filterTimeout = null;
+            input.addEventListener('input', () => {
+                clearTimeout(filterTimeout);
+                filterTimeout = setTimeout(() => {
+                    const val = input.value.trim();
+                    if (val) state.columnFilters[colKey] = val;
+                    else delete state.columnFilters[colKey];
+                    state.page = 1; state.expandedRow = null;
+                    _applyView();
+                }, 200);
+            });
+
+            input.addEventListener('keydown', e => { if (e.key === 'Escape') dropdown.remove(); });
+        }
+
+        dropdown.querySelector('.col-filter-clear-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            delete state.columnFilters[colKey];
+            dropdown.remove();
+            state.page = 1; state.expandedRow = null;
+            _applyView();
+        });
+
+        dropdown.addEventListener('click', e => e.stopPropagation());
+    }
+
     function _setupEventListeners() {
         let searchTimeout = null;
         const searchInput = document.getElementById('sizeSearch');
@@ -387,6 +527,9 @@ const SizeDash = (() => {
             if (state.columnPickerOpen && !sizePicker.contains(e.target) && e.target !== sizePickerBtn) {
                 state.columnPickerOpen = false;
                 sizePicker.style.display = 'none';
+            }
+            if (!e.target.closest('.col-filter-dropdown') && !e.target.closest('.col-filter-btn')) {
+                document.querySelectorAll('.col-filter-dropdown').forEach(d => d.remove());
             }
         });
 
@@ -469,6 +612,7 @@ const SizeDash = (() => {
         document.getElementById('sizeColumnPicker').style.display = 'none';
         state.page = 1;
         state.search = '';
+        state.columnFilters = {};
         _resetQuickFilters();
         state.sortBy = null;
         state.sortDir = 'desc';
@@ -477,6 +621,14 @@ const SizeDash = (() => {
         document.getElementById('sizeSearch').value = '';
         document.getElementById('sizeSearch').placeholder = 'Search title, codec, resolution\u2026';
         document.getElementById('sizeSearchClear').style.display = 'none';
+
+        // CONSUME PENDING FILTER (SET BY navigateWithFilter) \u2014 APPLIED AFTER STATE RESET, BEFORE RENDER
+        if (_pendingFilter && _pendingFilter.libraryTitle === title) {
+            const { filterType, filterKey, filterValue } = _pendingFilter;
+            _pendingFilter = null;
+            _applyFilterSpec(filterType, filterKey, filterValue);
+        }
+
         _updateTabStyles();
 
         if (dataCache[title] && dataCache[title].enriched) {
@@ -1093,6 +1245,23 @@ const SizeDash = (() => {
             data = data.filter(item => item.title && item.title.toLowerCase().includes(q));
         }
 
+        // COLUMN-HEADER FILTERS
+        const activeFilters = Object.entries(state.columnFilters).filter(([, v]) => v instanceof Set ? v.size > 0 : !!v);
+        if (activeFilters.length > 0) {
+            data = data.filter(item => activeFilters.every(([colKey, fv]) => {
+                const raw = item[colKey];
+                if (raw == null) return false;
+                if (typeof fv === 'function') return fv(raw);
+                if (fv instanceof Set) {
+                    if (Array.isArray(raw)) return raw.some(x => fv.has(String(x)));
+                    return fv.has(String(raw));
+                }
+                const fl = fv.toLowerCase();
+                if (Array.isArray(raw)) return raw.some(x => String(x).toLowerCase().includes(fl));
+                return String(raw).toLowerCase().includes(fl);
+            }));
+        }
+
         // QUICK FILTERS — NUMERIC THRESHOLD AND EXACT MATCH
         const qf = state.quickFilters;
         if (qf.criticRating) {
@@ -1176,13 +1345,18 @@ const SizeDash = (() => {
             const isSorted = state.sortBy === col.key;
             const sortClass = isSorted ? `sorted-${state.sortDir}` : '';
             const sortableClass = col.sortable ? 'sortable' : '';
+            const _fv = state.columnFilters[col.key];
+            const hasFilter = _fv instanceof Set ? _fv.size > 0 : !!_fv;
+            const filterActiveClass = hasFilter ? 'active' : '';
             const colLabel = colMgr.getColLabel(col, mobile);
             const widthStyle = colMgr.state.columnWidths[col.key]
                 ? `width:${colMgr.state.columnWidths[col.key]}px;`
                 : hasAnyWidth ? `min-width:${colLabel.length + 3}ch;` : '';
             const rankClass = col.key === 'rank' ? 'row-num-col' : '';
             headerHTML += `<th class="${sortableClass} ${sortClass} ${rankClass}" data-col="${col.key}" draggable="true" style="${widthStyle}">`;
-            headerHTML += `<div class="th-content"><span class="th-label">${escapeHTML(colLabel)}</span>`;
+            headerHTML += '<div class="th-content">';
+            if (col.key !== 'rank') headerHTML += `<button class="col-filter-btn ${filterActiveClass}" data-col="${col.key}" title="Filter ${colLabel}">${hasFilter ? '<span class="filter-dot"></span>' : ''}<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.5h13l-5 6v5l-3 2v-7z"/></svg></button>`;
+            headerHTML += `<span class="th-label">${escapeHTML(colLabel)}</span>`;
             if (col.sortable) headerHTML += '<span class="sort-indicator"></span>';
             headerHTML += '</div>';
             headerHTML += `<div class="resize-handle" data-col="${col.key}"></div>`;
@@ -1197,8 +1371,8 @@ const SizeDash = (() => {
 
         // SORT CLICK HANDLERS
         thead.querySelectorAll('th.sortable').forEach(th => {
-            th.addEventListener('click', () => {
-                if (isResizing) return;
+            th.addEventListener('click', (e) => {
+                if (isResizing || e.target.closest('.col-filter-btn') || e.target.closest('.resize-handle')) return;
                 const col = th.dataset.col;
                 if (state.sortBy === col) {
                     state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
@@ -1210,6 +1384,13 @@ const SizeDash = (() => {
                 state.page = 1;
                 state.expandedRow = null;
                 _applyView();
+            });
+        });
+
+        thead.querySelectorAll('.col-filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _toggleColumnFilter(btn, btn.dataset.col);
             });
         });
 
@@ -1734,5 +1915,32 @@ const SizeDash = (() => {
         }
     }
 
-    return { init, retry, invalidateCache, refreshActive };
+    // NAVIGATE TO SIZE PAGE AND PRE-APPLY A FILTER
+    // FILTERSPEC: { filterType: 'picklist'|'text'|'quick'|'function', filterKey: string, filterValue: * }
+    function navigateWithFilter(libraryTitle, filterSpec) {
+        // IF SIZE IS ALREADY SHOWING THE CORRECT LIBRARY, APPLY FILTER IMMEDIATELY
+        if (state.activeLibrary === libraryTitle) {
+            state.columnFilters = {};
+            _resetQuickFilters();
+            state.expandedRow = null;
+            _applyFilterSpec(filterSpec.filterType, filterSpec.filterKey, filterSpec.filterValue);
+            state.page = 1;
+            _applyView();
+            window.location.hash = '#size';
+            return;
+        }
+        // STORE PENDING FILTER — _switchLibrary WILL CONSUME IT AFTER ITS STATE RESET
+        _pendingFilter = { libraryTitle, ...filterSpec };
+        // IF SIZE HAS LOADED ITS LIBRARY LIST, SWITCH TO THE TARGET LIBRARY
+        const lib = state.libraries.find(l => l.title === libraryTitle);
+        if (lib) {
+            window.location.hash = '#size';
+            _switchLibrary(lib.title, lib.type);
+            return;
+        }
+        // SIZE NOT YET INITIALIZED — NAVIGATE AND LET init() CONSUME THE PENDING FILTER
+        window.location.hash = '#size';
+    }
+
+    return { init, retry, invalidateCache, refreshActive, navigateWithFilter };
 })();
