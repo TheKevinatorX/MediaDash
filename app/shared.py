@@ -401,7 +401,7 @@ class PlexCache:
 
 from sync_progress import (
     BackgroundEnrichment,
-    PRIO_BROWSE_MOVIE, PRIO_BROWSE_SHOW, PRIO_NAMING, PRIO_EPISODE,
+    PRIO_SYNC,
 )
 
 # ============================================================
