@@ -452,6 +452,21 @@
                 </div>
             </main>
             <footer class="pagination-bar" id="sizePaginationBar" style="display:none;"></footer>
+
+            <div id="sizeEpisodesPanel" class="size-episodes-panel" style="display:none;">
+                <div class="size-episodes-header">
+                    <span id="sizeEpisodesTitle"></span>
+                    <button class="btn btn-sm" id="sizeEpisodesClose" title="Close">&times;</button>
+                </div>
+                <div class="size-episodes-loading" id="sizeEpisodesLoading" style="display:none;">Loading episodes…</div>
+                <div class="size-episodes-error" id="sizeEpisodesError" style="display:none;"></div>
+                <table class="size-episodes-table" id="sizeEpisodesTable" style="display:none;">
+                    <thead>
+                        <tr><th>#</th><th>Title</th><th>Size</th><th>Duration</th><th>Resolution</th></tr>
+                    </thead>
+                    <tbody id="sizeEpisodesBody"></tbody>
+                </table>
+            </div>
         </div>
 
         <!-- SETTINGS PAGE -->
