@@ -28,7 +28,6 @@
             </div>
             <nav class="main-nav">
                 <a href="#home" class="nav-link" id="nav-home">Home</a>
-                <a href="#search" class="nav-link" id="nav-search">Search</a>
                 <a href="#naming" class="nav-link" id="nav-naming">Naming</a>
                 <a href="#size" class="nav-link" id="nav-size">Sizes</a>
             </nav>
@@ -86,93 +85,6 @@
                     <button class="btn btn-accent" onclick="HomeDash.reload()">Retry</button>
                 </div>
             </div>
-        </div>
-
-        <!-- SEARCH PAGE -->
-        <div id="page-search" class="page" style="display:none;">
-            <div class="toolbar" id="searchToolbar">
-                <div class="toolbar-left">
-                    <div class="tab-bar" id="searchTabBar"></div>
-                </div>
-                <div class="toolbar-right">
-                    <div class="search-container">
-                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" id="searchSearch" placeholder="Search title, genre, year..." autocomplete="off">
-                        <button class="search-clear" id="searchSearchClear" style="display:none;" title="Clear">&times;</button>
-                    </div>
-                    <div class="column-picker-wrapper" id="searchColumnPickerWrapper">
-                        <button class="btn btn-secondary" id="searchColumnPickerBtn">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="3" width="7" height="7"></rect>
-                                <rect x="14" y="3" width="7" height="7"></rect>
-                                <rect x="3" y="14" width="7" height="7"></rect>
-                                <rect x="14" y="14" width="7" height="7"></rect>
-                            </svg>
-                            Columns
-                        </button>
-                        <div class="column-picker" id="searchColumnPicker" style="display:none;"></div>
-                    </div>
-                    <select class="per-page-select" id="qfCriticRating" title="Filter by Critic Rating">
-                        <option value="">Critic Rating</option>
-                        <option value="7">Critic &gt; 7.0</option>
-                        <option value="8">Critic &gt; 8.0</option>
-                        <option value="9">Critic &gt; 9.0</option>
-                    </select>
-                    <select class="per-page-select" id="qfAudienceRating" title="Filter by Audience Rating">
-                        <option value="">Audience Rating</option>
-                        <option value="7">Audience &gt; 7.0</option>
-                        <option value="8">Audience &gt; 8.0</option>
-                        <option value="9">Audience &gt; 9.0</option>
-                    </select>
-                    <select class="per-page-select" id="qfYear" title="Filter by Year">
-                        <option value="">Year</option>
-                        <option value="1999">After 1999</option>
-                        <option value="2009">After 2009</option>
-                        <option value="2014">After 2014</option>
-                        <option value="2019">After 2019</option>
-                    </select>
-                    <select class="per-page-select" id="qfSubtitles" title="Filter by Subtitles">
-                        <option value="">Subtitles</option>
-                        <option value="english">English</option>
-                        <option value="none">None</option>
-                    </select>
-                    <select class="per-page-select" id="searchPerPage">
-                        <option value="25">25 per page</option>
-                        <option value="50">50 per page</option>
-                        <option value="100">100 per page</option>
-                    </select>
-                </div>
-            </div>
-            <main class="main-content">
-                <div class="state-overlay" id="searchLoading">
-                    <div class="page-loader">
-                        <div class="page-loader-ring page-loader-ring--outer"></div>
-                        <div class="page-loader-ring page-loader-ring--mid"></div>
-                        <div class="page-loader-core"></div>
-                    </div>
-                    <p class="state-text">Connecting to Plex...</p>
-                    <p class="state-sub">Analyzing your library in the background&hellip;</p>
-                </div>
-                <div class="state-overlay" id="searchError" style="display:none;">
-                    <svg class="state-icon error-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-                    <p class="state-text" id="searchErrorMsg">An error occurred</p>
-                    <button class="btn btn-accent" onclick="SearchDash.retry()">Retry</button>
-                </div>
-                <div class="state-overlay" id="searchEmpty" style="display:none;">
-                    <svg class="state-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
-                    <p class="state-text" id="searchEmptyMsg">No items found</p>
-                </div>
-                <div class="table-wrapper" id="searchTableWrapper" style="display:none;">
-                    <table class="data-table" id="searchTable">
-                        <thead id="searchTableHead"></thead>
-                        <tbody id="searchTableBody"></tbody>
-                    </table>
-                </div>
-            </main>
-            <footer class="pagination-bar" id="searchPaginationBar" style="display:none;"></footer>
         </div>
 
         <!-- NAMING PAGE -->
@@ -876,10 +788,6 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 <span>Home</span>
             </a>
-            <a href="#search" class="bottom-nav-item" id="bnav-search">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <span>Search</span>
-            </a>
             <a href="#naming" class="bottom-nav-item" id="bnav-naming">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                 <span>Naming</span>
@@ -899,7 +807,6 @@
     <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
     <script src="{{ url_for('static', filename='js/home.js') }}"></script>
     <script src="{{ url_for('static', filename='js/columns.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/search.js') }}"></script>
     <script src="{{ url_for('static', filename='js/naming.js') }}"></script>
     <script src="{{ url_for('static', filename='js/size.js') }}"></script>
     <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
