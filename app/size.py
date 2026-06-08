@@ -19,12 +19,19 @@ size_bp = Blueprint('size', __name__)
 api_logger = logging.getLogger('mediadash.size')
 
 # ============================================================
-# PROJECTIONS (imported from calculations.py)
+# SIZE SORT KEYS (imported from calculations.py)
 # ============================================================
 
-from calculations import (
-    _project_movie, _project_show, PROJECTORS, SIZE_SORT_KEY,
-)
+from calculations import SIZE_SORT_KEY
+
+
+def _annotate_for_size_view(item, rank, library_type):
+    """Attach rank/mediaType to a full (non-projected) cached item for the
+    merged Sizes view, without stripping any of Search's metadata fields."""
+    annotated = dict(item)
+    annotated['rank'] = rank
+    annotated['mediaType'] = library_type
+    return annotated
 
 # ============================================================
 # HELPERS
@@ -72,7 +79,7 @@ def get_libraries():
 
 
 def _library_response(title, library_type):
-    if library_type not in PROJECTORS:
+    if library_type not in SIZE_SORT_KEY:
         return jsonify({'error': f"Library type '{library_type}' is not supported"}), 400
 
     items, enriched, cache_age, enrichment_running = _get_search_items(title, library_type)
@@ -80,8 +87,7 @@ def _library_response(title, library_type):
     size_key = SIZE_SORT_KEY[library_type]
     items_sorted = sorted(items, key=lambda x: x.get(size_key, 0) or 0, reverse=True)
 
-    projector = PROJECTORS[library_type]
-    projected = [projector(item, i + 1) for i, item in enumerate(items_sorted)]
+    projected = [_annotate_for_size_view(item, i + 1, library_type) for i, item in enumerate(items_sorted)]
 
     search = request.args.get('search', '').strip()
     if search:
@@ -168,8 +174,7 @@ def get_enrichment_status(title):
             library_type = cached.get('type', 'movie')
             size_key = SIZE_SORT_KEY.get(library_type, 'fileSize')
             items_sorted = sorted(items, key=lambda x: x.get(size_key, 0) or 0, reverse=True)
-            projector = PROJECTORS.get(library_type, _project_movie)
-            projected = [projector(item, i + 1) for i, item in enumerate(items_sorted)]
+            projected = [_annotate_for_size_view(item, i + 1, library_type) for i, item in enumerate(items_sorted)]
             cache_age = round(time.time() - cached['ts'])
             return jsonify({
                 'status': 'complete',
