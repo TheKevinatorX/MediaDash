@@ -195,6 +195,13 @@
                         <button class="filter-btn" data-filter="issues" id="namingFilterIssues">Incorrect</button>
                         <button class="filter-btn" data-filter="ok" id="namingFilterOk">Correct</button>
                     </div>
+                    <select class="per-page-select" id="qfNamingYear" title="Filter by Year">
+                        <option value="">Year</option>
+                        <option value="1999">After 1999</option>
+                        <option value="2009">After 2009</option>
+                        <option value="2014">After 2014</option>
+                        <option value="2019">After 2019</option>
+                    </select>
                     <div class="column-picker-wrapper" id="namingColumnPickerWrapper">
                         <button class="btn btn-secondary" id="namingColumnPickerBtn">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -326,6 +333,30 @@
                         <input type="text" id="sizeSearch" placeholder="Search title..." autocomplete="off">
                         <button class="search-clear" id="sizeSearchClear" style="display:none;" title="Clear">&times;</button>
                     </div>
+                    <select class="per-page-select" id="qfSizeCriticRating" title="Filter by Critic Rating">
+                        <option value="">Critic Rating</option>
+                        <option value="7">Critic &gt; 7.0</option>
+                        <option value="8">Critic &gt; 8.0</option>
+                        <option value="9">Critic &gt; 9.0</option>
+                    </select>
+                    <select class="per-page-select" id="qfSizeAudienceRating" title="Filter by Audience Rating">
+                        <option value="">Audience Rating</option>
+                        <option value="7">Audience &gt; 7.0</option>
+                        <option value="8">Audience &gt; 8.0</option>
+                        <option value="9">Audience &gt; 9.0</option>
+                    </select>
+                    <select class="per-page-select" id="qfSizeYear" title="Filter by Year">
+                        <option value="">Year</option>
+                        <option value="1999">After 1999</option>
+                        <option value="2009">After 2009</option>
+                        <option value="2014">After 2014</option>
+                        <option value="2019">After 2019</option>
+                    </select>
+                    <select class="per-page-select" id="qfSizeSubtitles" title="Filter by Subtitles">
+                        <option value="">Subtitles</option>
+                        <option value="english">English</option>
+                        <option value="none">None</option>
+                    </select>
                     <div class="column-picker-wrapper" id="sizeColumnPickerWrapper">
                         <button class="btn btn-secondary" id="sizeColumnPickerBtn">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

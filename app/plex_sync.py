@@ -33,7 +33,7 @@ SUPPORTED_LIBRARY_TYPES = ('movie', 'show')
 
 
 # WALK ONE MOVIE LIBRARY: FETCH ONCE, EXTRACT FOR BOTH SEARCH AND NAMING
-def _sync_movie_library(section, title, lib_index, lib_total):
+def _sync_movie_library(section, title, lib_index, lib_total, progress_key=SYNC_KEY):
     raw_items = fetch_movies_with_streams(section)
     total = len(raw_items)
 
@@ -56,7 +56,7 @@ def _sync_movie_library(section, title, lib_index, lib_total):
 
         if (i + 1) % 100 == 0 or i + 1 == total:
             enrichment.update_progress(
-                SYNC_KEY, i + 1, total,
+                progress_key, i + 1, total,
                 f'Library {lib_index}/{lib_total} — {title} (movies): {i + 1:,}/{total:,}'
             )
 
@@ -66,9 +66,9 @@ def _sync_movie_library(section, title, lib_index, lib_total):
 
 
 # WALK ONE SHOW LIBRARY: FETCH SHOWS + EPISODES + EPISODE-META ONCE, EXTRACT FOR BOTH
-def _sync_show_library(section, title, lib_index, lib_total):
+def _sync_show_library(section, title, lib_index, lib_total, progress_key=SYNC_KEY):
     enrichment.update_progress(
-        SYNC_KEY, 0, 0,
+        progress_key, 0, 0,
         f'Library {lib_index}/{lib_total} — {title} (shows): fetching from Plex…'
     )
 
@@ -95,7 +95,7 @@ def _sync_show_library(section, title, lib_index, lib_total):
 
     def _on_merge_progress(current, t):
         enrichment.update_progress(
-            SYNC_KEY, current, t,
+            progress_key, current, t,
             f'Library {lib_index}/{lib_total} — {title} (shows): computing sizes {current:,}/{t:,}'
         )
 
@@ -113,7 +113,7 @@ def _sync_show_library(section, title, lib_index, lib_total):
             logger.error(f"Failed to extract naming data for episode: {e}")
         if (i + 1) % 100 == 0 or i + 1 == total_eps:
             enrichment.update_progress(
-                SYNC_KEY, i + 1, total_eps,
+                progress_key, i + 1, total_eps,
                 f'Library {lib_index}/{lib_total} — {title} (shows): naming {i + 1:,}/{total_eps:,} episodes'
             )
 
@@ -164,4 +164,45 @@ def start_full_sync():
     if enrichment.is_running(SYNC_KEY):
         return False
     enrichment.start(SYNC_KEY, run_full_sync, priority=PRIO_SYNC, silent=False)
+    return True
+
+
+# QUICK REFRESH FOR A SINGLE LIBRARY — RE-WALKS ONLY THAT SECTION, LEAVES OTHERS' CACHE UNTOUCHED
+def _sync_single_library(title, progress_key):
+    start = time.time()
+    enrichment.update_progress(progress_key, 0, 0, f'Connecting to Plex…')
+    try:
+        plex = PlexServer(PLEX_URL, PLEX_TOKEN, timeout=120)
+    except Exception as e:
+        logger.error(f"Library sync aborted for '{title}' — could not connect to Plex: {e}")
+        raise
+
+    section = next(
+        (s for s in plex.library.sections()
+         if s.title == title and s.type in SUPPORTED_LIBRARY_TYPES and is_library_selected(s.title)),
+        None
+    )
+    if section is None:
+        logger.error(f"Library sync aborted — '{title}' not found or not selected")
+        return
+
+    if section.type == 'movie':
+        _sync_movie_library(section, title, 1, 1, progress_key=progress_key)
+    else:
+        _sync_show_library(section, title, 1, 1, progress_key=progress_key)
+
+    elapsed = time.time() - start
+    logger.info(f"Quick refresh complete for library '{title}' in {elapsed:.1f}s")
+
+
+def library_sync_key(title):
+    return f'refresh:{title}'
+
+
+# START A QUICK REFRESH FOR ONE LIBRARY — RETURNS True IF (NEWLY) STARTED
+def start_library_sync(title):
+    key = library_sync_key(title)
+    if enrichment.is_running(key) or enrichment.is_running(SYNC_KEY):
+        return False
+    enrichment.start(key, _sync_single_library, args=(title, key), priority=PRIO_SYNC, silent=False)
     return True

@@ -19,6 +19,7 @@ const SizeDash = (() => {
         allItems: [],
         items: [],
         search: '',
+        quickFilters: { criticRating: '', audienceRating: '', year: '', subtitles: '' },
         sortBy: null,
         sortDir: 'desc',
         page: 1,
@@ -312,6 +313,21 @@ const SizeDash = (() => {
     // EVENT LISTENERS
     // --------------------------------------------------------
 
+    const QF_IDS = {
+        criticRating: 'qfSizeCriticRating',
+        audienceRating: 'qfSizeAudienceRating',
+        year: 'qfSizeYear',
+        subtitles: 'qfSizeSubtitles',
+    };
+
+    function _resetQuickFilters() {
+        state.quickFilters = { criticRating: '', audienceRating: '', year: '', subtitles: '' };
+        for (const id of Object.values(QF_IDS)) {
+            const el = document.getElementById(id);
+            if (el) { el.value = ''; el.classList.remove('active-filter'); }
+        }
+    }
+
     function _setupEventListeners() {
         let searchTimeout = null;
         const searchInput = document.getElementById('sizeSearch');
@@ -336,6 +352,19 @@ const SizeDash = (() => {
             state.expandedRow = null;
             _applyView();
         });
+
+        // QUICK FILTER DROPDOWNS
+        for (const [key, elId] of Object.entries(QF_IDS)) {
+            const el = document.getElementById(elId);
+            if (!el) continue;
+            el.addEventListener('change', () => {
+                state.quickFilters[key] = el.value;
+                el.classList.toggle('active-filter', !!el.value);
+                state.page = 1;
+                state.expandedRow = null;
+                _applyView();
+            });
+        }
 
         document.getElementById('sizePerPage').addEventListener('change', (e) => {
             state.perPage = parseInt(e.target.value);
@@ -391,6 +420,7 @@ const SizeDash = (() => {
         document.getElementById('sizeColumnPicker').style.display = 'none';
         state.page = 1;
         state.search = '';
+        _resetQuickFilters();
         state.sortBy = null;
         state.sortDir = 'desc';
         state.expandedRow = null;
@@ -439,6 +469,7 @@ const SizeDash = (() => {
         document.getElementById('sizeColumnPicker').style.display = 'none';
         state.page = 1;
         state.search = '';
+        _resetQuickFilters();
         state.sortBy = null;
         state.sortDir = 'desc';
         state.expandedRow = null;
@@ -485,6 +516,21 @@ const SizeDash = (() => {
             btn.dataset.type = lib.type;
             btn.innerHTML = `${escapeHTML(lib.title)} <span class="tab-count">${lib.count.toLocaleString()}</span>`;
             btn.addEventListener('click', () => _switchLibrary(lib.title, lib.type));
+
+            const refreshBtn = document.createElement('button');
+            refreshBtn.className = 'tab-refresh-btn';
+            refreshBtn.type = 'button';
+            refreshBtn.title = `Quick refresh "${lib.title}" from Plex`;
+            refreshBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>`;
+            refreshBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _quickRefreshLibrary(lib.title, lib.type, refreshBtn);
+            });
+            btn.appendChild(refreshBtn);
             bar.appendChild(btn);
         }
 
@@ -496,6 +542,44 @@ const SizeDash = (() => {
         seasonBtn.textContent = 'Seasons';
         seasonBtn.addEventListener('click', () => _switchToSeasons());
         bar.appendChild(seasonBtn);
+    }
+
+    // --------------------------------------------------------
+    // PER-LIBRARY QUICK REFRESH — RE-WALKS ONE LIBRARY ONLY
+    // --------------------------------------------------------
+
+    async function _quickRefreshLibrary(title, type, btnEl) {
+        if (btnEl.disabled) return;
+        btnEl.disabled = true;
+        btnEl.classList.add('spinning');
+        try {
+            const result = await api(`/api/sync/library/${encodeURIComponent(title)}`, { method: 'POST' });
+            if (result.status === 'error') throw new Error(result.message || 'Failed to start refresh');
+            _pollQuickRefresh(title, type, btnEl, result.key || `refresh:${title}`);
+        } catch (e) {
+            btnEl.disabled = false;
+            btnEl.classList.remove('spinning');
+            console.error('Quick refresh failed:', e);
+        }
+    }
+
+    function _pollQuickRefresh(title, type, btnEl, key) {
+        const iv = setInterval(async () => {
+            try {
+                const data = await api('/api/progress');
+                const stillRunning = (data.tasks || []).some(t => t.key === key);
+                if (!stillRunning) {
+                    clearInterval(iv);
+                    btnEl.disabled = false;
+                    btnEl.classList.remove('spinning');
+                    delete dataCache[title];
+                    if (state.activeLibrary === title) {
+                        await _fetchLibrary(title);
+                        _applyView();
+                    }
+                }
+            } catch { /* IGNORE TRANSIENT ERRORS — KEEP POLLING */ }
+        }, 3000);
     }
 
     function _updateTabStyles() {
@@ -1007,6 +1091,26 @@ const SizeDash = (() => {
         if (state.search) {
             const q = state.search.toLowerCase();
             data = data.filter(item => item.title && item.title.toLowerCase().includes(q));
+        }
+
+        // QUICK FILTERS — NUMERIC THRESHOLD AND EXACT MATCH
+        const qf = state.quickFilters;
+        if (qf.criticRating) {
+            const threshold = parseFloat(qf.criticRating);
+            data = data.filter(item => item.rating != null && item.rating > threshold);
+        }
+        if (qf.audienceRating) {
+            const threshold = parseFloat(qf.audienceRating);
+            data = data.filter(item => item.audienceRating != null && item.audienceRating > threshold);
+        }
+        if (qf.year) {
+            const threshold = parseInt(qf.year, 10);
+            data = data.filter(item => item.year != null && item.year > threshold);
+        }
+        if (qf.subtitles === 'english') {
+            data = data.filter(item => item.subtitleLanguages && item.subtitleLanguages.toLowerCase().includes('english'));
+        } else if (qf.subtitles === 'none') {
+            data = data.filter(item => !item.subtitleLanguages || item.subtitleLanguages === 'None');
         }
 
         // SORT

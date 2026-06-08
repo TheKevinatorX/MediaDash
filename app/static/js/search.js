@@ -338,8 +338,61 @@ const SearchDash = (() => {
             btn.dataset.type = lib.type;
             btn.innerHTML = `${escapeHTML(lib.title)} <span class="tab-count">${lib.count.toLocaleString()}</span>`;
             btn.addEventListener('click', () => _switchLibrary(lib.title, lib.type));
+
+            const refreshBtn = document.createElement('button');
+            refreshBtn.className = 'tab-refresh-btn';
+            refreshBtn.type = 'button';
+            refreshBtn.title = `Quick refresh "${lib.title}" from Plex`;
+            refreshBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>`;
+            refreshBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _quickRefreshLibrary(lib.title, lib.type, refreshBtn);
+            });
+            btn.appendChild(refreshBtn);
             bar.appendChild(btn);
         }
+    }
+
+    // --------------------------------------------------------
+    // PER-LIBRARY QUICK REFRESH — RE-WALKS ONE LIBRARY ONLY
+    // --------------------------------------------------------
+
+    async function _quickRefreshLibrary(title, type, btnEl) {
+        if (btnEl.disabled) return;
+        btnEl.disabled = true;
+        btnEl.classList.add('spinning');
+        try {
+            const result = await api(`/api/sync/library/${encodeURIComponent(title)}`, { method: 'POST' });
+            if (result.status === 'error') throw new Error(result.message || 'Failed to start refresh');
+            _pollQuickRefresh(title, type, btnEl, result.key || `refresh:${title}`);
+        } catch (e) {
+            btnEl.disabled = false;
+            btnEl.classList.remove('spinning');
+            console.error('Quick refresh failed:', e);
+        }
+    }
+
+    function _pollQuickRefresh(title, type, btnEl, key) {
+        const iv = setInterval(async () => {
+            try {
+                const data = await api('/api/progress');
+                const stillRunning = (data.tasks || []).some(t => t.key === key);
+                if (!stillRunning) {
+                    clearInterval(iv);
+                    btnEl.disabled = false;
+                    btnEl.classList.remove('spinning');
+                    delete dataCache[title];
+                    if (state.activeLibrary === title) {
+                        await _fetchLibrary(title, type);
+                        _applyView();
+                    }
+                }
+            } catch { /* IGNORE TRANSIENT ERRORS — KEEP POLLING */ }
+        }, 3000);
     }
 
     function _updateTabStyles() {

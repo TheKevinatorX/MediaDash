@@ -500,6 +500,27 @@ def trigger_sync():
     return jsonify({'status': 'already_running' if status in ('pending', 'running') else 'started'})
 
 
+@app.route('/api/sync/library/<path:title>', methods=['POST'])
+def trigger_library_sync(title):
+    from plex_sync import start_library_sync, library_sync_key, SYNC_KEY
+
+    if enrichment.is_running(SYNC_KEY):
+        return jsonify({'status': 'already_running', 'message': 'Full sync is in progress — try again once it finishes.'}), 409
+
+    try:
+        started = start_library_sync(title)
+    except Exception as e:
+        logger.error(f"Failed to trigger library sync for '{title}': {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 503
+
+    key = library_sync_key(title)
+    if started:
+        logger.info(f"Quick refresh triggered for library '{title}' via /api/sync/library")
+        return jsonify({'status': 'started', 'key': key})
+    status = enrichment.get_status(key)
+    return jsonify({'status': 'already_running' if status in ('pending', 'running') else 'started', 'key': key})
+
+
 # ============================================================
 # HEALTH CHECK
 # ============================================================
