@@ -854,7 +854,7 @@ const SizeDash = (() => {
         try {
             const url = `/size/library/${encodeURIComponent(title)}?all=true`;
             const data = await api(url);
-            dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null };
+            dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null, needsSync: data.needsSync ?? false };
             _updateSeasonTabCount();
             state.allItems = data.items;
             _showLoading(false);
@@ -1070,6 +1070,7 @@ const SizeDash = (() => {
                     enriched: data.enriched,
                     enrichmentRunning: data.enrichmentRunning ?? false,
                     cacheAge: data.cacheAge ?? null,
+                    needsSync: data.needsSync ?? false,
                 };
                 _updateSeasonTabCount();
                 _updateSeasonAnalysisLib(lib.title, true, data.enriched, null);
@@ -1307,7 +1308,11 @@ const SizeDash = (() => {
 
         if (state.items.length === 0) {
             _hideTable();
-            _showEmpty(state.search ? 'No results match your search.' : 'This library is empty.');
+            if (dataCache[state.activeLibrary]?.needsSync) {
+                _showEmpty('No cached data for this library yet — click Sync (top right) to load it from Plex.');
+            } else {
+                _showEmpty(state.search ? 'No results match your search.' : 'This library is empty.');
+            }
             _renderPagination();
         } else {
             _renderTable();

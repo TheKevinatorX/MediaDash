@@ -248,6 +248,7 @@ const NamingDash = (() => {
                 enriched: data.enriched,
                 enrichmentRunning: data.enrichmentRunning ?? false,
                 cacheAge: data.cacheAge ?? null,
+                needsSync: data.needsSync ?? false,
             };
             if (!data.enriched && data.enrichmentRunning) _silentEnrichmentPoll(title);
         } catch (err) {
@@ -378,6 +379,7 @@ const NamingDash = (() => {
                 enriched: data.enriched,
                 enrichmentRunning: data.enrichmentRunning ?? false,
                 cacheAge: data.cacheAge ?? null,
+                needsSync: data.needsSync ?? false,
             };
             state.allItems = data.items;
             state.stats = stats;
@@ -536,7 +538,9 @@ const NamingDash = (() => {
 
         if (state.items.length === 0) {
             _hideTable();
-            if (state.statusFilter === 'ok' && !state.search) {
+            if (dataCache[state.activeLibrary]?.needsSync) {
+                _showEmpty('No cached data for this library yet — click Sync (top right) to load it from Plex.');
+            } else if (state.statusFilter === 'ok' && !state.search) {
                 _showEmpty('All items have naming issues.');
             } else if (state.statusFilter === 'issues' && !state.search && dataCache[state.activeLibrary]?.enriched) {
                 _showAllClear();

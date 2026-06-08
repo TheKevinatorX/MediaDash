@@ -665,7 +665,7 @@ const SearchDash = (() => {
         try {
             const url = `/search/library/${encodeURIComponent(title)}?all=true`;
             const data = await api(url);
-            dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null };
+            dataCache[title] = { items: data.items, type: data.libraryType, enriched: data.enriched, enrichmentRunning: data.enrichmentRunning ?? false, cacheAge: data.cacheAge ?? null, needsSync: data.needsSync ?? false };
             _showLoading(false);
 
             if (!data.enriched && data.enrichmentRunning && title === state.activeLibrary) {
@@ -850,8 +850,12 @@ const SearchDash = (() => {
 
         if (state.items.length === 0) {
             _hideTable();
-            const hasFilters = state.search || activeFilters.length > 0 || Object.values(state.quickFilters).some(v => !!v);
-            _showEmpty(hasFilters ? 'No results match your filters.' : 'This library is empty.');
+            if (dataCache[state.activeLibrary]?.needsSync) {
+                _showEmpty('No cached data for this library yet — click Sync (top right) to load it from Plex.');
+            } else {
+                const hasFilters = state.search || activeFilters.length > 0 || Object.values(state.quickFilters).some(v => !!v);
+                _showEmpty(hasFilters ? 'No results match your filters.' : 'This library is empty.');
+            }
             _renderPagination();
         } else {
             _renderTable();
