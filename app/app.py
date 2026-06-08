@@ -59,11 +59,9 @@ def favicon():
 
 
 # REGISTER BLUEPRINTS AFTER APP CREATION TO AVOID CIRCULAR IMPORTS
-from search import search_bp  # noqa: E402
 from naming import naming_bp  # noqa: E402
 from size import size_bp  # noqa: E402
 
-app.register_blueprint(search_bp, url_prefix='/search')
 app.register_blueprint(naming_bp, url_prefix='/naming')
 app.register_blueprint(size_bp, url_prefix='/size')
 
