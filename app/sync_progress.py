@@ -14,7 +14,7 @@ from threading import Lock, Thread
 
 # ============================================================
 # PRIORITY LEVELS — lower number = processed first
-# Mirrors the nav bar order: Home → Search → Naming → Sizes
+# Only one task type remains now that sync is unified into a single pass
 # ============================================================
 
 PRIO_SYNC = 0   # the single unified Plex sync pass
