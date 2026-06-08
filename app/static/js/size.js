@@ -469,6 +469,9 @@ const SizeDash = (() => {
     }
 
     function _setupEventListeners() {
+        const episodesClose = document.getElementById('sizeEpisodesClose');
+        if (episodesClose) episodesClose.addEventListener('click', _closeEpisodesPanel);
+
         let searchTimeout = null;
         const searchInput = document.getElementById('sizeSearch');
         const searchClear = document.getElementById('sizeSearchClear');
@@ -1415,6 +1418,8 @@ const SizeDash = (() => {
         }
         tbody.innerHTML = bodyHTML;
 
+        tbody.addEventListener('click', _handleEpisodesButtonClick);
+
         tbody.querySelectorAll('.data-row').forEach(row => {
             row.addEventListener('click', () => {
                 const idx = parseInt(row.dataset.index);
@@ -1467,6 +1472,10 @@ const SizeDash = (() => {
             case 'showTitle':
                 return escapeHTML(truncate(String(value), 50));
             case 'name':
+                if (item._isSeason) {
+                    return `${escapeHTML(String(value))} `
+                        + `<button class="btn btn-sm size-view-episodes" data-library="${escapeHTML(item.library)}" data-show="${escapeHTML(item.showTitle)}" data-season="${escapeHTML(item.name)}">Episodes</button>`;
+                }
                 return escapeHTML(String(value));
             case 'library':
                 return `<span class="text-muted" style="font-size:0.75rem">${escapeHTML(String(value))}</span>`;
@@ -1786,12 +1795,84 @@ const SizeDash = (() => {
                 <span class="size-bar-label">${escapeHTML(name)}${info ? ` <span class="size-bar-info">(${escapeHTML(info)})</span>` : ''}</span>
                 <div class="size-bar-track"><div class="size-bar-fill ${sizeClass}" style="width:${pct}%"></div></div>
                 <span class="size-bar-value">${escapeHTML(season.sizeFormatted || '-')}</span>
+                <button class="btn btn-sm size-view-episodes" data-library="${escapeHTML(state.activeLibrary)}" data-show="${escapeHTML(item.title)}" data-season="${escapeHTML(season.name)}">Episodes</button>
             </div>`;
         }
         const totals = [item.totalSizeFormatted, item.totalDurationFormatted].filter(Boolean);
         html += `<div class="size-bar-total">Total: ${escapeHTML(totals.join(' \u00B7 ') || '-')}</div>`;
         html += '</div></div>';
         return html;
+    }
+
+    // --------------------------------------------------------
+    // EPISODE DRILL-DOWN
+    // --------------------------------------------------------
+
+    async function _fetchEpisodes(libraryTitle, showTitle, seasonName) {
+        const url = `/size/library/${encodeURIComponent(libraryTitle)}/episodes`
+            + `?show=${encodeURIComponent(showTitle)}&season=${encodeURIComponent(seasonName)}`;
+        return api(url);
+    }
+
+    function _renderEpisodeRows(episodes) {
+        const body = document.getElementById('sizeEpisodesBody');
+        body.innerHTML = episodes.map(ep => `
+            <tr>
+                <td>${ep.index ?? ''}</td>
+                <td>${escapeHTML(ep.title)}</td>
+                <td>${escapeHTML(ep.sizeFormatted)}</td>
+                <td>${escapeHTML(ep.durationFormatted)}</td>
+                <td>${escapeHTML(ep.resolution || '—')}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function _openEpisodesPanel(libraryTitle, showTitle, seasonName) {
+        const panel = document.getElementById('sizeEpisodesPanel');
+        const title = document.getElementById('sizeEpisodesTitle');
+        const loading = document.getElementById('sizeEpisodesLoading');
+        const errorEl = document.getElementById('sizeEpisodesError');
+        const table = document.getElementById('sizeEpisodesTable');
+
+        panel.style.display = '';
+        title.textContent = `${showTitle} — ${seasonName}`;
+        loading.style.display = '';
+        errorEl.style.display = 'none';
+        table.style.display = 'none';
+
+        try {
+            const data = await _fetchEpisodes(libraryTitle, showTitle, seasonName);
+            _renderEpisodeRows(data.episodes || []);
+            loading.style.display = 'none';
+            table.style.display = '';
+        } catch (err) {
+            loading.style.display = 'none';
+            errorEl.textContent = err.message;
+            errorEl.style.display = '';
+        }
+    }
+
+    function _closeEpisodesPanel() {
+        const panel = document.getElementById('sizeEpisodesPanel');
+        const title = document.getElementById('sizeEpisodesTitle');
+        const body = document.getElementById('sizeEpisodesBody');
+        const errorEl = document.getElementById('sizeEpisodesError');
+        const table = document.getElementById('sizeEpisodesTable');
+
+        panel.style.display = 'none';
+        title.textContent = '';
+        body.innerHTML = '';
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+        table.style.display = 'none';
+    }
+
+    function _handleEpisodesButtonClick(e) {
+        const btn = e.target.closest('.size-view-episodes');
+        if (!btn) return;
+        e.stopPropagation();
+        const { library, show, season } = btn.dataset;
+        _openEpisodesPanel(library, show, season);
     }
 
     function _detailItem(label, value) {
