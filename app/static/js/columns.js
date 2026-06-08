@@ -24,6 +24,7 @@ function createColumnManager(config) {
         getMasterCols,
         mobileLabels = {},
         defaultMobileKeysFn = () => [],
+        alwaysOnKeyFn = () => 'title',
         pickerEnabled = true,
         pickerElementId = null,
         onChange = () => {},
@@ -189,8 +190,8 @@ function createColumnManager(config) {
         for (const col of tableCols) {
             const dChecked  = state.visibleColumns.includes(col.key) ? 'checked' : '';
             const mChecked  = state.mobileColumns.includes(col.key) ? 'checked' : '';
-            const dDisabled = col.key === 'title' ? 'disabled' : '';
-            const mDisabled = col.key === 'title' ? 'disabled' : '';
+            const dDisabled = col.key === alwaysOnKeyFn() ? 'disabled' : '';
+            const mDisabled = col.key === alwaysOnKeyFn() ? 'disabled' : '';
             const dCustom = state.columnLabels.desktop[col.key] || '';
             const mCustom = state.columnLabels.mobile[col.key] || '';
             const mPlaceholder = mobileLabels[col.key] || col.label;
@@ -304,7 +305,7 @@ function createColumnManager(config) {
                         state.visibleColumns = tableCols.map(c => c.key);
                         break;
                     case 'deskNone': {
-                        const keepCol = tableCols.find(c => c.key === 'title') || tableCols[0];
+                        const keepCol = tableCols.find(c => c.key === alwaysOnKeyFn()) || tableCols[0];
                         state.visibleColumns = keepCol ? [keepCol.key] : [];
                         break;
                     }
@@ -316,7 +317,7 @@ function createColumnManager(config) {
                         state.mobileColumns = tableCols.map(c => c.key);
                         break;
                     case 'mobNone': {
-                        const keepCol = tableCols.find(c => c.key === 'title') || tableCols[0];
+                        const keepCol = tableCols.find(c => c.key === alwaysOnKeyFn()) || tableCols[0];
                         state.mobileColumns = keepCol ? [keepCol.key] : [];
                         break;
                     }

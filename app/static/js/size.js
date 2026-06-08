@@ -559,6 +559,7 @@ const SizeDash = (() => {
         viewKeyFn: () => _getViewKey(),
         getMasterCols: () => _getMasterCols(),
         mobileLabels: SIZE_MOBILE_LABELS,
+        alwaysOnKeyFn: () => _mobileAlwaysOnKey(),
         defaultMobileKeysFn: () => _defaultMobileCols(),
         pickerEnabled: true,
         pickerElementId: 'sizeColumnPicker',
