@@ -137,6 +137,42 @@ function createColumnManager(config) {
         loadColumnLabels();
     }
 
+    // --------------------------------------------------------
+    // ORDERING & LABELS
+    // --------------------------------------------------------
+
+    function getColLabel(col, isMobile) {
+        if (col.key === 'rank') return '#';
+        if (isMobile) return state.columnLabels.mobile[col.key] || mobileLabels[col.key] || col.label;
+        return state.columnLabels.desktop[col.key] || col.label;
+    }
+
+    function syncColumnOrder() {
+        if (state.columnOrder.length === 0) return;
+        const master = getMasterCols();
+        const visibleKeys = master.filter(c => c.key !== 'rank' && state.visibleColumns.includes(c.key)).map(c => c.key);
+        state.columnOrder = state.columnOrder.filter(k => visibleKeys.includes(k));
+        for (const k of visibleKeys) {
+            if (!state.columnOrder.includes(k)) state.columnOrder.push(k);
+        }
+    }
+
+    function getOrderedVisibleCols() {
+        const master = getMasterCols();
+        const rankCol = master.find(c => c.key === 'rank') || { key: 'rank', label: '#', sortable: false };
+        const vis = master.filter(c => c.key !== 'rank' && state.visibleColumns.includes(c.key));
+        if (state.columnOrder.length === 0) return [rankCol, ...vis];
+        const ordered = [];
+        for (const key of state.columnOrder) {
+            const col = vis.find(c => c.key === key);
+            if (col) ordered.push(col);
+        }
+        for (const col of vis) {
+            if (!ordered.includes(col)) ordered.push(col);
+        }
+        return [rankCol, ...ordered];
+    }
+
     return {
         state,
         lsGetJSON, lsSetJSON, escapeHTML,
@@ -147,5 +183,6 @@ function createColumnManager(config) {
         loadColumnLabels, saveColumnLabels,
         loadAll,
         mobileLabels,
+        getColLabel, syncColumnOrder, getOrderedVisibleCols,
     };
 }
