@@ -6,6 +6,7 @@ import os
 import time
 
 from flask import Flask, jsonify, render_template, request, redirect, send_from_directory
+from flask_compress import Compress
 
 import shared as _shared
 from shared import (
@@ -33,6 +34,9 @@ from shared import (
 validate_environment()
 
 app = Flask(__name__)
+
+# COMPRESS JSON/TEXT RESPONSES — SHRINKS LARGE NAMING/SIZE PAYLOADS FOR SLOW MOBILE LINKS
+Compress(app)
 
 
 @app.context_processor

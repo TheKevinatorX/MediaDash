@@ -39,6 +39,35 @@ const NamingDash = (() => {
     const dataCache = {};
     let isResizing = false;
     const LS_PREFIX = 'mediadash_naming_';
+    const SS_CACHE_PREFIX = 'mediadash_naming_cache_';
+
+    // PERSIST AN ENRICHED LIBRARY ENTRY TO sessionStorage SO MOBILE TAB
+    // RELOADS (BROWSER MEMORY RECLAIM) DON'T FORCE A FULL RE-FETCH/RE-DOWNLOAD
+    function _persistCacheEntry(title, entry) {
+        if (!entry || !entry.enriched) return;
+        try {
+            sessionStorage.setItem(SS_CACHE_PREFIX + title, JSON.stringify(entry));
+        } catch { /* QUOTA OR PRIVATE-MODE — JUST SKIP PERSISTENCE */ }
+    }
+
+    function _evictCacheEntry(title) {
+        delete dataCache[title];
+        try { sessionStorage.removeItem(SS_CACHE_PREFIX + title); } catch { /* IGNORE */ }
+    }
+
+    // REHYDRATE dataCache FROM sessionStorage ON LOAD (BEFORE ANY NETWORK FETCH)
+    function _hydrateCacheFromSession() {
+        let key;
+        try {
+            for (let i = 0; i < sessionStorage.length; i++) {
+                key = sessionStorage.key(i);
+                if (!key || !key.startsWith(SS_CACHE_PREFIX)) continue;
+                const title = key.slice(SS_CACHE_PREFIX.length);
+                const entry = JSON.parse(sessionStorage.getItem(key));
+                if (entry && entry.enriched) dataCache[title] = entry;
+            }
+        } catch { /* CORRUPT/UNAVAILABLE STORAGE — IGNORE */ }
+    }
 
     // MAP SUB-FILTER NAME TO ITEM PROPERTY KEY
     const MISMATCH_SUB_FILTER_KEY = {
@@ -71,6 +100,7 @@ const NamingDash = (() => {
     // --------------------------------------------------------
 
     async function init() {
+        _hydrateCacheFromSession();
         _showLoading(true, 'Connecting to Plex...');
 
         try {
@@ -261,6 +291,7 @@ const NamingDash = (() => {
                 cacheAge: data.cacheAge ?? null,
                 needsSync: data.needsSync ?? false,
             };
+            _persistCacheEntry(title, dataCache[title]);
             if (!data.enriched && data.enrichmentRunning) _silentEnrichmentPoll(title);
         } catch (err) {
             console.warn(`Naming preload failed for '${title}':`, err);
@@ -281,6 +312,7 @@ const NamingDash = (() => {
                         enriched: true,
                         cacheAge: result.cacheAge ?? dataCache[title]?.cacheAge,
                     };
+                    _persistCacheEntry(title, dataCache[title]);
                 } else if (result.status === 'error') {
                     clearInterval(iv);
                 }
@@ -357,7 +389,7 @@ const NamingDash = (() => {
                     clearInterval(iv);
                     btnEl.disabled = false;
                     btnEl.classList.remove('spinning');
-                    delete dataCache[title];
+                    _evictCacheEntry(title);
                     if (state.activeLibrary === title) {
                         await _fetchLibrary(title, type);
                         _applyView();
@@ -396,6 +428,7 @@ const NamingDash = (() => {
                 cacheAge: data.cacheAge ?? null,
                 needsSync: data.needsSync ?? false,
             };
+            _persistCacheEntry(title, dataCache[title]);
             state.allItems = data.items;
             state.stats = stats;
             _showLoading(false);
@@ -429,6 +462,7 @@ const NamingDash = (() => {
                     const libType = dataCache[title]?.type;
                     const stats = _computeStats(result.items || [], libType);
                     dataCache[title] = { items: result.items || [], type: libType, stats, enriched: true, cacheAge: result.cacheAge ?? dataCache[title]?.cacheAge };
+                    _persistCacheEntry(title, dataCache[title]);
 
                     if (state.activeLibrary === title) {
                         state.allItems = result.items || [];
@@ -1150,13 +1184,13 @@ const NamingDash = (() => {
     // --------------------------------------------------------
 
     function invalidateCache() {
-        for (const key of Object.keys(dataCache)) delete dataCache[key];
+        for (const key of Object.keys(dataCache)) _evictCacheEntry(key);
         _stopEnrichmentPolling();
     }
 
     async function refreshActive() {
         if (state.activeLibrary) {
-            delete dataCache[state.activeLibrary];
+            _evictCacheEntry(state.activeLibrary);
             await _fetchLibrary(state.activeLibrary, state.activeLibraryType);
             _applyView();
         }
