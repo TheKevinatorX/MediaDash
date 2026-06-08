@@ -85,12 +85,12 @@ def _sync_show_library(section, title, lib_index, lib_total):
     # SEARCH SIDE: EXTRACT SHOWS, THEN MERGE EPISODE METADATA (SIZES/SEASONS/RESOLUTIONS)
     search_extractor = EXTRACTORS['show']
     search_items = []
-    errors = 0
+    search_errors = 0
     for show in shows:
         try:
             search_items.append(search_extractor(show))
         except Exception as e:
-            errors += 1
+            search_errors += 1
             logger.error(f"Failed to extract search data for '{getattr(show, 'title', '?')}': {e}")
 
     def _on_merge_progress(current, t):
@@ -104,11 +104,12 @@ def _sync_show_library(section, title, lib_index, lib_total):
     # NAMING SIDE: EXTRACT EPISODES (REUSES THE SAME `episodes` LIST — NO RE-FETCH)
     total_eps = len(episodes)
     naming_items = []
+    naming_errors = 0
     for i, ep in enumerate(episodes):
         try:
             naming_items.append(extract_episode_naming(ep, show_year_map))
         except Exception as e:
-            errors += 1
+            naming_errors += 1
             logger.error(f"Failed to extract naming data for episode: {e}")
         if (i + 1) % 100 == 0 or i + 1 == total_eps:
             enrichment.update_progress(
@@ -119,15 +120,20 @@ def _sync_show_library(section, title, lib_index, lib_total):
     cache.set(f'search:{title}', search_items, 'show')
     cache.set(f'naming:{title}', naming_items, 'show')
     logger.info(
-        f"Synced show library '{title}': {len(search_items)} shows, "
-        f"{len(naming_items)} episodes ({errors} errors)"
+        f"Synced show library '{title}': {len(search_items)} shows ({search_errors} errors), "
+        f"{len(naming_items)} episodes ({naming_errors} errors)"
     )
 
 
 # TOP-LEVEL ORCHESTRATOR — RUNS AS A SINGLE BACKGROUND TASK (SYNC_KEY)
 def run_full_sync():
     start = time.time()
-    plex = PlexServer(PLEX_URL, PLEX_TOKEN, timeout=120)
+    enrichment.update_progress(SYNC_KEY, 0, 0, 'Connecting to Plex…')
+    try:
+        plex = PlexServer(PLEX_URL, PLEX_TOKEN, timeout=120)
+    except Exception as e:
+        logger.error(f"Full sync aborted — could not connect to Plex: {e}")
+        raise
 
     sections = [
         s for s in plex.library.sections()
