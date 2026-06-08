@@ -7,7 +7,6 @@ import time
 import logging
 import requests
 
-from flask import Blueprint, jsonify, request
 from plexapi.exceptions import Unauthorized
 
 import shared as _shared
@@ -17,7 +16,6 @@ from shared import (
     sort_key_fn, _libraries_from_cache, _libraries_from_plex,
 )
 
-search_bp = Blueprint('search', __name__)
 fetch_logger = logging.getLogger('mediadash.search')
 api_logger = logging.getLogger('mediadash.search.api')
 
@@ -304,6 +302,47 @@ def fetch_episode_metadata(section):
     return meta
 
 
+# FETCH RAW PER-EPISODE ROWS FOR ONE SEASON OF ONE SHOW, ON DEMAND (NOT CACHED)
+# Mirrors fetch_episode_metadata's per-episode extraction shape but returns
+# individual rows instead of rolling them up — used by the Episodes drill-down.
+def fetch_episodes_for_season(show, season_name):
+    rows = []
+    for ep in show.episodes():
+        season_title = getattr(ep, 'parentTitle', None) or f"Season {getattr(ep, 'parentIndex', '?')}"
+        if season_title != season_name:
+            continue
+
+        ep_size = 0
+        try:
+            if ep.media and ep.media[0].parts:
+                ep_size = getattr(ep.media[0].parts[0], 'size', 0) or 0
+        except (IndexError, AttributeError):
+            pass
+
+        ep_duration = getattr(ep, 'duration', 0) or 0
+
+        ep_resolution = None
+        try:
+            if ep.media:
+                ep_resolution = getattr(ep.media[0], 'videoResolution', None)
+        except (IndexError, AttributeError):
+            pass
+
+        rows.append({
+            'title': ep.title,
+            'index': getattr(ep, 'index', None),
+            'seasonName': season_title,
+            'size': ep_size,
+            'sizeFormatted': format_bytes(ep_size),
+            'duration': ep_duration,
+            'durationFormatted': format_duration_short(ep_duration),
+            'resolution': ep_resolution,
+        })
+
+    rows.sort(key=lambda r: r['index'] or 0)
+    return rows
+
+
 # MERGE EPISODE METADATA INTO SHOW ITEMS LIST IN-PLACE
 def _merge_episode_meta(items, episode_meta, progress_fn=None):
     total = len(items)
@@ -405,110 +444,3 @@ def fetch_library_items(title, library_type):
     )
     return _short_duration_display_items(cached['items']), cached['type'], True
 
-# ============================================================
-# BLUEPRINT ROUTES
-# ============================================================
-
-# LIST ALL SUPPORTED PLEX LIBRARIES
-@search_bp.route('/libraries')
-def get_libraries():
-    libs = _libraries_from_cache(EXTRACTORS)
-    if libs:
-        return jsonify({'libraries': libs})
-
-    # COLD PATH: NO CACHE YET — CONNECT TO PLEX
-    try:
-        def _fetch(plex):
-            libraries = _libraries_from_plex(plex, EXTRACTORS, logger=api_logger)
-            api_logger.info(f'Found {len(libraries)} supported libraries')
-            return jsonify({'libraries': libraries})
-
-        return with_plex_retry(_fetch)
-
-    except Unauthorized:
-        return jsonify({'error': 'Authentication failed. Check your PLEX_TOKEN.'}), 401
-    except Exception as e:
-        api_logger.error(f'Failed to fetch libraries: {e}')
-        return jsonify({'error': f'Failed to connect to Plex: {e}'}), 500
-
-
-# FETCH LIBRARY ITEMS WITH OPTIONAL SERVER-SIDE OPERATIONS
-@search_bp.route('/library/<path:title>')
-def get_library(title):
-    cache_key = f'search:{title}'
-    fetch_all = request.args.get('all', '').lower() == 'true'
-
-    cached = cache.get_stale(cache_key)
-    if cached is None or cached.get('type') not in EXTRACTORS:
-        return jsonify({
-            'items': [], 'total': 0, 'page': 1, 'perPage': 0, 'totalPages': 1,
-            'libraryType': None, 'libraryTitle': title,
-            'enriched': False, 'enrichmentRunning': False, 'cacheAge': None,
-            'needsSync': True,
-        })
-
-    lib_type = cached['type']
-    items = _short_duration_display_items(cached['items'])
-    cache_age = round(time.time() - cached['ts'])
-
-    if fetch_all:
-        return jsonify({
-            'items': items, 'total': len(items), 'page': 1,
-            'perPage': len(items), 'totalPages': 1,
-            'libraryType': lib_type, 'libraryTitle': title,
-            'enriched': True, 'enrichmentRunning': False, 'cacheAge': cache_age,
-        })
-
-    search = request.args.get('search', '').strip()
-    sort_by = request.args.get('sort', None)
-    sort_dir = request.args.get('dir', 'asc')
-    try:
-        page = max(1, int(request.args.get('page', 1)))
-    except (ValueError, TypeError):
-        page = 1
-    try:
-        per_page = min(100, max(10, int(request.args.get('per_page', 25))))
-    except (ValueError, TypeError):
-        per_page = 25
-
-    result = apply_table_operations(items, search, sort_by, sort_dir, page, per_page)
-    result['libraryType'] = lib_type
-    result['libraryTitle'] = title
-    result['enriched'] = True
-    result['enrichmentRunning'] = False
-    result['cacheAge'] = cache_age
-    return jsonify(result)
-
-
-# CHECK BACKGROUND ENRICHMENT STATUS AND RETURN ENRICHED DATA WHEN COMPLETE
-@search_bp.route('/library/<path:title>/enrichment')
-def get_enrichment_status(title):
-    cache_key = f'search:{title}'
-    status = enrichment.get_status(cache_key)
-    progress = enrichment.get_progress(cache_key)
-
-    if status == 'complete':
-        cached = cache.get(cache_key)
-        if cached:
-            cache_age = round(time.time() - cached['ts'])
-            return jsonify({
-                'status': 'complete',
-                'items': _short_duration_display_items(cached['items']),
-                'total': len(cached['items']),
-                'cacheAge': cache_age,
-            })
-        return jsonify({'status': 'complete', 'items': [], 'total': 0})
-
-    resp = {'status': status}
-    if progress:
-        resp['progress'] = progress
-    return jsonify(resp)
-
-
-# RETURN COLUMN DEFINITIONS FOR A LIBRARY TYPE
-@search_bp.route('/columns/<library_type>')
-def get_columns(library_type):
-    columns = COLUMN_DEFINITIONS.get(library_type)
-    if not columns:
-        return jsonify({'error': f"Unknown library type '{library_type}'"}), 404
-    return jsonify({'columns': columns, 'libraryType': library_type})

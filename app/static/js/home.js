@@ -526,13 +526,13 @@ const HomeDash = (() => {
 
         if (stats.containers && Object.keys(stats.containers).length > 0) {
             const sorted = Object.entries(stats.containers).sort((a, b) => b[1] - a[1]).slice(0, 4);
-            const cb = movieLib ? (name) => SearchDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'container', filterValue: name.toLowerCase() }) : null;
+            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'container', filterValue: name.toLowerCase() }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Containers \u2014 Movies', e, fmt, cb), 'containers'));
             if (cb) clickHandlers.set('containers', cb);
         }
         if (stats.codecs && Object.keys(stats.codecs).length > 0) {
             const sorted = Object.entries(stats.codecs).sort((a, b) => b[1] - a[1]).slice(0, 4);
-            const cb = movieLib ? (name) => SearchDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'videoCodec', filterValue: name.toLowerCase() }) : null;
+            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'videoCodec', filterValue: name.toLowerCase() }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Video Codecs \u2014 Movies', e, fmt, cb), 'codecs'));
             if (cb) clickHandlers.set('codecs', cb);
         }
@@ -542,7 +542,7 @@ const HomeDash = (() => {
                 const ai = ORDER.indexOf(a[0]), bi = ORDER.indexOf(b[0]);
                 return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
             });
-            const cb = movieLib ? (name) => SearchDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'resolution', filterValue: name }) : null;
+            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'resolution', filterValue: name }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Resolutions — Movies', e, fmt, cb), 'resolutions'));
             if (cb) clickHandlers.set('resolutions', cb);
         }
@@ -551,7 +551,7 @@ const HomeDash = (() => {
             const [topDecade, topCount] = sorted[0];
             const cb = movieLib ? (name) => {
                 const start = parseInt(name);
-                SearchDash.navigateWithFilter(movieLib, { filterType: 'function', filterKey: 'year', filterValue: y => y >= start && y < start + 10 });
+                SizeDash.navigateWithFilter(movieLib, { filterType: 'function', filterKey: 'year', filterValue: y => y >= start && y < start + 10 });
             } : null;
             const chips = sorted.slice(0, 6).map(([d, c]) =>
                 cb
@@ -563,7 +563,7 @@ const HomeDash = (() => {
         }
         if (stats.genres && Object.keys(stats.genres).length > 0) {
             const sorted = Object.entries(stats.genres).sort((a, b) => b[1] - a[1]).slice(0, 6);
-            const cb = movieLib ? (name) => SearchDash.navigateWithFilter(movieLib, { filterType: 'text', filterKey: 'genres', filterValue: name }) : null;
+            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'text', filterKey: 'genres', filterValue: name }) : null;
             const chips = sorted.map(([g, c]) =>
                 cb
                     ? `<span class="stat-chip stat-chip--clickable" data-value="${e(g)}" tabindex="0" role="button" title="Browse ${e(g)}">${e(g)} <span class="stat-chip-count">${fmt(c)}</span></span>`
@@ -576,8 +576,8 @@ const HomeDash = (() => {
             const { with: withSubs, without: withoutSubs, total, langs } = stats.subtitles;
             const withPct = Math.round((withSubs / total) * 100);
             const withoutPct = 100 - withPct;
-            const langCb = movieLib ? (name) => SearchDash.navigateWithFilter(movieLib, { filterType: 'text', filterKey: 'subtitleLanguages', filterValue: name }) : null;
-            const withoutCb = movieLib ? () => SearchDash.navigateWithFilter(movieLib, { filterType: 'quick', filterKey: 'subtitles', filterValue: 'none' }) : null;
+            const langCb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'text', filterKey: 'subtitleLanguages', filterValue: name }) : null;
+            const withoutCb = movieLib ? () => SizeDash.navigateWithFilter(movieLib, { filterType: 'quick', filterKey: 'subtitles', filterValue: 'none' }) : null;
             const langChips = Object.entries(langs || {})
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
@@ -617,7 +617,7 @@ const HomeDash = (() => {
                 if (bi !== -1) return 1;
                 return b[1] - a[1];
             });
-            const cb = movieLib ? (name) => SearchDash.navigateWithFilter(movieLib, { filterType: 'text', filterKey: 'audioChannelsFormatted', filterValue: name }) : null;
+            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'text', filterKey: 'audioChannelsFormatted', filterValue: name }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Audio Channels \u2014 Movies', e, fmt, cb), 'audioChannels'));
             if (cb) clickHandlers.set('audioChannels', cb);
         }
@@ -631,7 +631,7 @@ const HomeDash = (() => {
                 if (bi !== -1) return 1;
                 return b[1] - a[1];
             });
-            const cb = showLib ? (name) => SearchDash.navigateWithFilter(showLib, { filterType: 'picklist', filterKey: 'showStatus', filterValue: name }) : null;
+            const cb = showLib ? (name) => SizeDash.navigateWithFilter(showLib, { filterType: 'picklist', filterKey: 'showStatus', filterValue: name }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Show Status — Shows', e, fmt, cb), 'showStatuses'));
             if (cb) clickHandlers.set('showStatuses', cb);
         }
@@ -645,7 +645,7 @@ const HomeDash = (() => {
                 if (bi !== -1) return 1;
                 return b[1] - a[1];
             });
-            const cb = showLib ? (name) => SearchDash.navigateWithFilter(showLib, { filterType: 'picklist', filterKey: 'contentRating', filterValue: name }) : null;
+            const cb = showLib ? (name) => SizeDash.navigateWithFilter(showLib, { filterType: 'picklist', filterKey: 'contentRating', filterValue: name }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Content Ratings \u2014 Shows', e, fmt, cb), 'showContentRatings'));
             if (cb) clickHandlers.set('showContentRatings', cb);
         }
@@ -685,16 +685,14 @@ const HomeDash = (() => {
                 await api('/api/sync', { method: 'POST' });
                 // INVALIDATE JS-SIDE CACHES IN ALL PAGE MODULES
                 for (const m of [
-                    typeof SearchDash !== 'undefined' ? SearchDash : null,
+                    typeof SizeDash !== 'undefined' ? SizeDash : null,
                     typeof NamingDash !== 'undefined' ? NamingDash : null,
-                    typeof SizeDash   !== 'undefined' ? SizeDash   : null,
                 ]) {
                     if (m && m.invalidateCache) m.invalidateCache();
                 }
                 // RE-FETCH THE ACTIVE PAGE'S LIBRARY IF USER IS ON A NON-HOME PAGE
                 const currentPage = getHashPage();
                 const refreshMap = {
-                    search: typeof SearchDash !== 'undefined' ? SearchDash : null,
                     naming: typeof NamingDash !== 'undefined' ? NamingDash : null,
                     size:   typeof SizeDash   !== 'undefined' ? SizeDash   : null,
                 };

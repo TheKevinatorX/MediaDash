@@ -93,12 +93,6 @@ const PAGES = {
         bnavId: 'bnav-home',
         init: () => HomeDash.init(),
     },
-    search: {
-        pageId: 'page-search',
-        navId: 'nav-search',
-        bnavId: 'bnav-search',
-        init: () => SearchDash.init(),
-    },
     naming: {
         pageId: 'page-naming',
         navId: 'nav-naming',
