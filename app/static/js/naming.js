@@ -212,7 +212,7 @@ const NamingDash = (() => {
         _updateTabStyles();
         _updateFilterButtons();
         _updateLegend(type);
-        colMgr.loadVisibleColumns();
+        colMgr.loadVisibleColumns(() => _defaultDesktopCols(state.activeLibraryType));
         colMgr.loadMobileColumns();
         colMgr.loadColumnLabels();
         colMgr.loadColumnOrder();
