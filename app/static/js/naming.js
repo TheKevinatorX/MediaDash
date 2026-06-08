@@ -29,12 +29,7 @@ const NamingDash = (() => {
         totalPages: 0,
         expandedRow: null,
         stats: { total: 0, matches: 0, mismatches: 0, breakdown: {} },
-        columnWidths: {},
-        visibleColumns: [],
-        mobileColumns: [],
-        columnLabels: { desktop: {}, mobile: {} },
         columnPickerOpen: false,
-        columnOrder: [],
         enrichmentPolling: null,
         enrichmentProgress: null,
         episodeFormat: null,
@@ -147,7 +142,7 @@ const NamingDash = (() => {
             e.stopPropagation();
             state.columnPickerOpen = !state.columnPickerOpen;
             picker.style.display = state.columnPickerOpen ? 'flex' : 'none';
-            if (state.columnPickerOpen) _renderColumnPicker();
+            if (state.columnPickerOpen) colMgr.renderColumnPicker();
         });
 
         document.addEventListener('click', (e) => {
@@ -210,16 +205,17 @@ const NamingDash = (() => {
         state.expandedRow = null;
         state.statusFilter = 'issues';
         state.mismatchSubFilter = null;
-        _loadColumnWidths(title);
+        colMgr.loadColumnWidths();
 
         document.getElementById('namingSearch').value = '';
         document.getElementById('namingSearchClear').style.display = 'none';
         _updateTabStyles();
         _updateFilterButtons();
         _updateLegend(type);
-        _loadColumnPreferences(title);
-        _loadColumnLabels(title);
-        _loadColumnOrder(title);
+        colMgr.loadVisibleColumns();
+        colMgr.loadMobileColumns();
+        colMgr.loadColumnLabels();
+        colMgr.loadColumnOrder();
         state.columnPickerOpen = false;
         document.getElementById('namingColumnPicker').style.display = 'none';
 
@@ -308,55 +304,6 @@ const NamingDash = (() => {
             tab.classList.toggle('active', tab.dataset.title === state.activeLibrary);
         });
     }
-
-    // --------------------------------------------------------
-    // COLUMN WIDTHS (NAMING HAS NO COLUMN PICKER)
-    // --------------------------------------------------------
-
-    function _loadColumnWidths(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}widths_${title}`, null);
-        state.columnWidths = (saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : {};
-    }
-
-    function _saveColumnWidths() {
-        lsSetJSON(`${LS_PREFIX}widths_${state.activeLibrary}`, state.columnWidths);
-    }
-
-    function _loadColumnOrder(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}order_${title}`, null);
-        state.columnOrder = (Array.isArray(saved) && saved.length > 0) ? saved : [];
-    }
-
-    function _saveColumnOrder() {
-        lsSetJSON(`${LS_PREFIX}order_${state.activeLibrary}`, state.columnOrder);
-    }
-
-    function _syncColumnOrder() {
-        if (state.columnOrder.length === 0) return;
-        const master = _getActiveMasterCols();
-        const visibleKeys = master.filter(c => c.key !== 'rank' && state.visibleColumns.includes(c.key)).map(c => c.key);
-        state.columnOrder = state.columnOrder.filter(k => visibleKeys.includes(k));
-        for (const k of visibleKeys) {
-            if (!state.columnOrder.includes(k)) state.columnOrder.push(k);
-        }
-    }
-
-    function _getOrderedVisibleCols() {
-        const master = _getActiveMasterCols();
-        const rankCol = master.find(c => c.key === 'rank');
-        const vis = master.filter(c => c.key !== 'rank' && state.visibleColumns.includes(c.key));
-        if (state.columnOrder.length === 0) return rankCol ? [rankCol, ...vis] : vis;
-        const ordered = [];
-        for (const key of state.columnOrder) {
-            const col = vis.find(c => c.key === key);
-            if (col) ordered.push(col);
-        }
-        for (const col of vis) {
-            if (!ordered.includes(col)) ordered.push(col);
-        }
-        return rankCol ? [rankCol, ...ordered] : ordered;
-    }
-
     // --------------------------------------------------------
     // DATA FETCHING
     // --------------------------------------------------------
@@ -659,245 +606,22 @@ const NamingDash = (() => {
         return ['actualFilename'];
     }
 
-    function _loadColumnPreferences(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}colprefs_${title}`, null);
-        if (saved && Array.isArray(saved.desktop) && Array.isArray(saved.mobile)) {
-            state.visibleColumns = saved.desktop;
-            state.mobileColumns = saved.mobile;
-            return;
-        }
-        state.visibleColumns = _defaultDesktopCols(state.activeLibraryType);
-        state.mobileColumns = _defaultMobileCols();
-    }
+    const NAMING_MOBILE_LABELS = Object.fromEntries(
+        [...MOVIE_COLUMNS, ...SHOW_COLUMNS]
+            .filter(c => c.mobileLabel)
+            .map(c => [c.key, c.mobileLabel])
+    );
 
-    function _saveColumnPreferences() {
-        lsSetJSON(`${LS_PREFIX}colprefs_${state.activeLibrary}`, {
-            desktop: state.visibleColumns,
-            mobile: state.mobileColumns,
-        });
-    }
-
-    function _loadColumnLabels(title) {
-        const saved = lsGetJSON(`${LS_PREFIX}labels_${title}`, null);
-        if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
-            if (saved.desktop !== undefined || saved.mobile !== undefined) {
-                state.columnLabels = { desktop: saved.desktop || {}, mobile: saved.mobile || {} };
-            } else {
-                state.columnLabels = { desktop: saved, mobile: {} };
-            }
-        } else {
-            state.columnLabels = { desktop: {}, mobile: {} };
-        }
-    }
-
-    function _saveColumnLabels() {
-        lsSetJSON(`${LS_PREFIX}labels_${state.activeLibrary}`, state.columnLabels);
-    }
-
-    function _getColLabel(col, isMobile) {
-        if (col.key === 'rank') return '#';
-        if (isMobile) return state.columnLabels.mobile[col.key] || col.mobileLabel || col.label;
-        return state.columnLabels.desktop[col.key] || col.label;
-    }
-
-    function _renderColumnPicker() {
-        const picker = document.getElementById('namingColumnPicker');
-        const master = _getActiveMasterCols();
-        const hasLabels = Object.keys(state.columnLabels.desktop).length > 0 || Object.keys(state.columnLabels.mobile).length > 0;
-
-        let html = '<div class="picker-col-header"><span>Desktop</span><span>Mobile</span><span title="Desktop">D</span><span title="Mobile">M</span></div>';
-        html += '<div class="picker-list">';
-        for (const col of master) {
-            if (col.key === 'rank') continue;
-            const dChecked  = state.visibleColumns.includes(col.key) ? 'checked' : '';
-            const mChecked  = state.mobileColumns.includes(col.key) ? 'checked' : '';
-            const mDisabled = col.key === 'actualFilename' ? 'disabled' : '';
-            const dCustom = state.columnLabels.desktop[col.key] || '';
-            const mCustom = state.columnLabels.mobile[col.key] || '';
-            html += `<div class="picker-item picker-item--grid">
-                <input type="text" class="picker-label-input" data-col="${col.key}" data-labeltype="desktop" value="${escapeHTML(dCustom)}" placeholder="${escapeHTML(col.label)}">
-                <input type="text" class="picker-label-input picker-label-input--mobile" data-col="${col.key}" data-labeltype="mobile" value="${escapeHTML(mCustom)}" placeholder="${escapeHTML(col.mobileLabel || col.label)}">
-                <input type="checkbox" data-col="${col.key}" data-section="desktop" ${dChecked}>
-                <input type="checkbox" data-col="${col.key}" data-section="mobile" ${mChecked} ${mDisabled}>
-            </div>`;
-        }
-        html += '</div>';
-        const orderedMobNaming = state.mobileColumns.map(k => master.find(c => c.key === k)).filter(Boolean);
-        if (orderedMobNaming.length > 0) {
-            html += '<div class="picker-mobile-order"><div class="picker-order-header">Mobile Column Order</div><div class="picker-order-list">';
-            orderedMobNaming.forEach(c => {
-                const lbl = _getColLabel(c, true);
-                html += `<div class="picker-order-item" draggable="true" data-col="${c.key}"><span class="picker-drag-handle">⠿</span><span>${escapeHTML(lbl)}</span></div>`;
-            });
-            html += '</div></div>';
-        }
-        html += '<div class="picker-footer">';
-        html += '<div class="picker-footer-section"><span class="picker-footer-label">Desktop</span>';
-        html += '<button class="btn btn-sm" id="namingDeskAll" title="Select All">All</button>';
-        html += '<button class="btn btn-sm" id="namingDeskNone" title="Deselect All">None</button>';
-        html += '<button class="btn btn-sm" id="namingDeskDefaults" title="Reset to defaults">↺</button></div>';
-        html += '<div class="picker-footer-section"><span class="picker-footer-label">Mobile</span>';
-        html += '<button class="btn btn-sm" id="namingMobAll" title="Select All">All</button>';
-        html += '<button class="btn btn-sm" id="namingMobNone" title="Deselect All">None</button>';
-        html += '<button class="btn btn-sm" id="namingMobDefaults" title="Reset to defaults">↺</button></div>';
-        if (hasLabels) {
-            html += '<div class="picker-footer-section"><button class="btn btn-sm" id="namingResetLabels" style="flex:1">Reset Label Names</button></div>';
-        }
-        html += '<div class="picker-footer-section picker-save-section"><button class="btn btn-sm btn-accent" id="namingSaveColumns" style="flex:1">Save</button></div>';
-        html += '</div>';
-        picker.innerHTML = html;
-
-        // Mobile column order drag-and-drop
-        const namingOrderList = picker.querySelector('.picker-order-list');
-        if (namingOrderList) {
-            let dragSrc = null;
-            namingOrderList.querySelectorAll('.picker-order-item').forEach(item => {
-                item.addEventListener('dragstart', e => {
-                    dragSrc = item;
-                    item.classList.add('dragging');
-                    e.dataTransfer.effectAllowed = 'move';
-                });
-                item.addEventListener('dragend', () => {
-                    item.classList.remove('dragging');
-                    state.mobileColumns = [...namingOrderList.querySelectorAll('.picker-order-item')].map(i => i.dataset.col);
-                    _saveColumnPreferences();
-                    _renderTable();
-                });
-                item.addEventListener('dragover', e => {
-                    e.preventDefault();
-                    if (!dragSrc || item === dragSrc) return;
-                    const { top, height } = item.getBoundingClientRect();
-                    namingOrderList.insertBefore(dragSrc, e.clientY < top + height / 2 ? item : item.nextSibling);
-                });
-                item.addEventListener('dragenter', e => e.preventDefault());
-            });
-        }
-
-        let labelDebounce = null;
-        picker.querySelectorAll('.picker-label-input').forEach(input => {
-            input.addEventListener('input', () => {
-                clearTimeout(labelDebounce);
-                labelDebounce = setTimeout(() => {
-                    const colKey = input.dataset.col;
-                    const labelType = input.dataset.labeltype;
-                    const val = input.value.trim();
-                    if (val) state.columnLabels[labelType][colKey] = val;
-                    else delete state.columnLabels[labelType][colKey];
-                    _saveColumnLabels();
-                    _renderTable();
-                    const footer = picker.querySelector('.picker-footer');
-                    const nowHasLabels = Object.keys(state.columnLabels.desktop).length > 0 || Object.keys(state.columnLabels.mobile).length > 0;
-                    const existing = document.getElementById('namingResetLabels');
-                    if (nowHasLabels && !existing) {
-                        const sec = document.createElement('div');
-                        sec.className = 'picker-footer-section';
-                        sec.innerHTML = '<button class="btn btn-sm" id="namingResetLabels" style="flex:1">Reset Label Names</button>';
-                        footer.appendChild(sec);
-                        sec.querySelector('button').addEventListener('click', () => {
-                            state.columnLabels = { desktop: {}, mobile: {} };
-                            _saveColumnLabels();
-                            _renderTable();
-                            _renderColumnPicker();
-                        });
-                    } else if (!nowHasLabels && existing) {
-                        existing.closest('.picker-footer-section').remove();
-                    }
-                }, 250);
-            });
-        });
-
-        picker.querySelectorAll('input[data-section="desktop"]').forEach(cb => {
-            cb.addEventListener('change', () => {
-                const colKey = cb.dataset.col;
-                if (cb.checked) {
-                    if (!state.visibleColumns.includes(colKey)) state.visibleColumns.push(colKey);
-                } else {
-                    state.visibleColumns = state.visibleColumns.filter(k => k !== colKey);
-                    state.columnOrder = state.columnOrder.filter(k => k !== colKey);
-                }
-                _syncColumnOrder();
-                _saveColumnPreferences();
-                _saveColumnOrder();
-                if (!_isMobile()) _renderTable();
-            });
-        });
-
-        picker.querySelectorAll('input[data-section="mobile"]').forEach(cb => {
-            cb.addEventListener('change', () => {
-                const colKey = cb.dataset.col;
-                if (cb.checked) {
-                    if (!state.mobileColumns.includes(colKey)) state.mobileColumns.push(colKey);
-                } else {
-                    state.mobileColumns = state.mobileColumns.filter(k => k !== colKey);
-                }
-                _saveColumnPreferences();
-                if (_isMobile()) _renderTable();
-            });
-        });
-
-        document.getElementById('namingDeskAll').addEventListener('click', () => {
-            state.visibleColumns = master.map(c => c.key);
-            _syncColumnOrder();
-            _saveColumnPreferences();
-            _saveColumnOrder();
-            _renderColumnPicker();
-            if (!_isMobile()) _renderTable();
-        });
-
-        document.getElementById('namingDeskNone').addEventListener('click', () => {
-            state.visibleColumns = [];
-            state.columnOrder = [];
-            _saveColumnPreferences();
-            _saveColumnOrder();
-            _renderColumnPicker();
-            if (!_isMobile()) _renderTable();
-        });
-
-        document.getElementById('namingDeskDefaults').addEventListener('click', () => {
-            state.visibleColumns = _defaultDesktopCols(state.activeLibraryType);
-            state.columnOrder = [];
-            _saveColumnPreferences();
-            _saveColumnOrder();
-            _renderColumnPicker();
-            if (!_isMobile()) _renderTable();
-        });
-
-        document.getElementById('namingMobAll').addEventListener('click', () => {
-            state.mobileColumns = master.filter(c => c.key !== 'rank').map(c => c.key);
-            _saveColumnPreferences();
-            _renderColumnPicker();
-            if (_isMobile()) _renderTable();
-        });
-
-        document.getElementById('namingMobNone').addEventListener('click', () => {
-            state.mobileColumns = ['showTitle'];
-            _saveColumnPreferences();
-            _renderColumnPicker();
-            if (_isMobile()) _renderTable();
-        });
-
-        document.getElementById('namingMobDefaults').addEventListener('click', () => {
-            state.mobileColumns = _defaultMobileCols();
-            _saveColumnPreferences();
-            _renderColumnPicker();
-            if (_isMobile()) _renderTable();
-        });
-
-        const resetLabelsBtn = document.getElementById('namingResetLabels');
-        if (resetLabelsBtn) {
-            resetLabelsBtn.addEventListener('click', () => {
-                state.columnLabels = { desktop: {}, mobile: {} };
-                _saveColumnLabels();
-                _renderTable();
-                _renderColumnPicker();
-            });
-        }
-
-        document.getElementById('namingSaveColumns').addEventListener('click', () => {
-            state.columnPickerOpen = false;
-            picker.style.display = 'none';
-        });
-    }
+    const colMgr = createColumnManager({
+        lsPrefix: LS_PREFIX,
+        viewKeyFn: () => state.activeLibrary,
+        getMasterCols: () => _getActiveMasterCols(),
+        mobileLabels: NAMING_MOBILE_LABELS,
+        defaultMobileKeysFn: () => _defaultMobileCols(),
+        pickerEnabled: true,
+        pickerElementId: 'namingColumnPicker',
+        onChange: () => _renderTable(),
+    });
 
     function _renderTable() {
         const thead = document.getElementById('namingTableHead');
@@ -909,21 +633,21 @@ const NamingDash = (() => {
             ? (() => {
                 const master = _getActiveMasterCols();
                 const rank = master.find(c => c.key === 'rank');
-                const rest = master.filter(c => c.key !== 'rank' && state.mobileColumns.includes(c.key));
+                const rest = master.filter(c => c.key !== 'rank' && colMgr.state.mobileColumns.includes(c.key));
                 return rank ? [rank, ...rest] : rest;
             })()
-            : _getOrderedVisibleCols();
-        table.classList.toggle('resizable', Object.keys(state.columnWidths).length > 0);
+            : colMgr.getOrderedVisibleCols();
+        table.classList.toggle('resizable', Object.keys(colMgr.state.columnWidths).length > 0);
 
         let headerHTML = '<tr><th class="expand-col"></th>';
         for (const col of cols) {
             const isSorted = state.sortBy === col.key;
             const sortClass = isSorted ? `sorted-${state.sortDir}` : '';
-            const widthStyle = state.columnWidths[col.key] ? `width:${state.columnWidths[col.key]}px;` : '';
+            const widthStyle = colMgr.state.columnWidths[col.key] ? `width:${colMgr.state.columnWidths[col.key]}px;` : '';
             const rankClass = col.key === 'rank' ? 'row-num-col' : '';
             headerHTML += `<th class="${sortClass} ${rankClass}" data-col="${col.key}" draggable="true" style="${widthStyle}">`;
             headerHTML += '<div class="th-content">';
-            headerHTML += `<span class="th-label">${escapeHTML(_getColLabel(col, mobile))}</span>`;
+            headerHTML += `<span class="th-label">${escapeHTML(colMgr.getColLabel(col, mobile))}</span>`;
             if (col.sortable) headerHTML += '<span class="sort-indicator"></span>';
             headerHTML += '</div>';
             headerHTML += `<div class="resize-handle" data-col="${col.key}"></div>`;
@@ -946,8 +670,8 @@ const NamingDash = (() => {
             });
         });
 
-        _initResizeHandles(thead);
-        _initColumnDrag(thead);
+        colMgr.initResizeHandles(thead, 'namingTable', (resizing) => { isResizing = resizing; });
+        colMgr.initColumnDrag(thead);
 
         let bodyHTML = '';
         for (let i = 0; i < state.items.length; i++) {
@@ -983,127 +707,6 @@ const NamingDash = (() => {
         });
     }
 
-    // --------------------------------------------------------
-    // RESIZE & DRAG
-    // --------------------------------------------------------
-
-    function _initResizeHandles(thead) {
-        thead.querySelectorAll('.resize-handle').forEach(handle => {
-            handle.addEventListener('mousedown', (e) => {
-                e.preventDefault(); e.stopPropagation();
-                isResizing = true;
-                const th = handle.closest('th');
-                const colKey = handle.dataset.col;
-                const startX = e.pageX;
-                const startWidth = th.offsetWidth;
-                const table = document.getElementById('namingTable');
-                table.classList.add('resizable');
-                thead.querySelectorAll('th[data-col]').forEach(t => {
-                    if (!t.style.width) t.style.width = t.offsetWidth + 'px';
-                });
-
-                function onMove(e) {
-                    const minW = colKey === 'rank' ? 16 : 50;
-                    const newW = Math.max(minW, startWidth + e.pageX - startX);
-                    th.style.width = newW + 'px';
-                    state.columnWidths[colKey] = newW;
-                }
-                function onUp() {
-                    document.removeEventListener('mousemove', onMove);
-                    document.removeEventListener('mouseup', onUp);
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
-                    _saveColumnWidths();
-                    setTimeout(() => { isResizing = false; }, 0);
-                }
-                document.body.style.cursor = 'col-resize';
-                document.body.style.userSelect = 'none';
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
-            });
-        });
-    }
-
-    function _initColumnDrag(thead) {
-        let dragColKey = null;
-        const table = thead.closest('table');
-
-        thead.querySelectorAll('th[data-col]').forEach(th => {
-            th.addEventListener('dragstart', (e) => {
-                if (e.target.closest('.resize-handle')) { e.preventDefault(); return; }
-                dragColKey = th.dataset.col;
-
-                // Styled ghost element for the drag cursor
-                const labelText = th.querySelector('.th-label')?.textContent?.trim() || th.dataset.col;
-                const ghost = document.createElement('div');
-                ghost.className = 'col-drag-ghost';
-                ghost.innerHTML = `<span class="col-drag-ghost-icon">⠿</span><span>${labelText}</span>`;
-                document.body.appendChild(ghost);
-                e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
-                requestAnimationFrame(() => ghost.remove());
-
-                th.classList.add('col-drag-source');
-                table?.classList.add('col-drag-active');
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', dragColKey);
-            });
-
-            th.addEventListener('dragend', () => {
-                dragColKey = null;
-                table?.classList.remove('col-drag-active');
-                thead.querySelectorAll('th').forEach(t => t.classList.remove('col-drag-source', 'drop-before', 'drop-after'));
-            });
-
-            th.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                if (!dragColKey || th.dataset.col === dragColKey) return;
-                const rect = th.getBoundingClientRect();
-                const insertAfter = e.clientX > rect.left + rect.width / 2;
-                thead.querySelectorAll('th').forEach(t => t.classList.remove('drop-before', 'drop-after'));
-                th.classList.add(insertAfter ? 'drop-after' : 'drop-before');
-            });
-
-            th.addEventListener('dragleave', (e) => {
-                if (!th.contains(e.relatedTarget)) {
-                    th.classList.remove('drop-before', 'drop-after');
-                }
-            });
-
-            th.addEventListener('drop', (e) => {
-                e.preventDefault();
-                const insertAfter = th.classList.contains('drop-after');
-                table?.classList.remove('col-drag-active');
-                thead.querySelectorAll('th').forEach(t => t.classList.remove('col-drag-source', 'drop-before', 'drop-after'));
-
-                const fromKey = e.dataTransfer.getData('text/plain');
-                const toKey = th.dataset.col;
-                if (!fromKey || fromKey === toKey) return;
-
-                const keys = _getOrderedVisibleCols().map(c => c.key);
-                const fi = keys.indexOf(fromKey);
-                if (fi === -1) return;
-                keys.splice(fi, 1);
-                const newTi = keys.indexOf(toKey);
-                if (newTi === -1) return;
-                keys.splice(insertAfter ? newTi + 1 : newTi, 0, fromKey);
-
-                state.columnOrder = keys;
-                _saveColumnOrder();
-                _renderTable();
-
-                // Flash the newly placed column after re-render
-                setTimeout(() => {
-                    const landed = document.querySelector(`th[data-col="${fromKey}"]`);
-                    if (landed) {
-                        landed.classList.add('drop-flash');
-                        landed.addEventListener('animationend', () => landed.classList.remove('drop-flash'), { once: true });
-                    }
-                }, 16);
-            });
-        });
-    }
-
-    // --------------------------------------------------------
     // CELL FORMATTING
     // --------------------------------------------------------
 
