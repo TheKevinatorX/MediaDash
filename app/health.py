@@ -222,6 +222,88 @@ def _run_quick_scan():
 
 
 # ============================================================
+# DEEP SCAN
+# ============================================================
+
+def _ffmpeg_decode_file(path):
+    """
+    Run a full ffmpeg decode pass to detect truncation or mid-file corruption.
+    Returns (error_count: int). A non-zero count means decode errors were found.
+    """
+    try:
+        result = subprocess.run(
+            ['ffmpeg', '-v', 'error', '-i', path, '-f', 'null', '-'],
+            capture_output=True,
+            text=True,
+            timeout=3600,  # 1-hour cap per file
+        )
+        # ffmpeg writes errors to stderr
+        error_lines = [
+            line for line in result.stderr.splitlines()
+            if line.strip() and not line.startswith('ffmpeg version')
+        ]
+        return len(error_lines)
+    except subprocess.TimeoutExpired:
+        health_logger.warning(f"ffmpeg timed out on: {path}")
+        return 1
+    except FileNotFoundError:
+        health_logger.error("ffmpeg not found — deep scan unavailable")
+        return 0
+
+
+def _run_deep_scan():
+    """Background worker: run full ffmpeg decode on all cached items and enrich results."""
+    targets = _collect_scan_targets()
+    total = len(targets)
+
+    existing = _load_health_cache()
+    results_by_path = {r['filePath']: r for r in existing.get('results', [])}
+
+    for i, target in enumerate(targets):
+        enrichment.update_progress(DEEP_SCAN_KEY, i + 1, total, step=target['title'])
+        path = target['filePath']
+
+        if not os.path.exists(path):
+            continue
+
+        try:
+            error_count = _ffmpeg_decode_file(path)
+        except Exception as e:
+            health_logger.warning(f"Unexpected error in deep scan for {path}: {e}")
+            continue
+
+        if error_count > 0:
+            entry = results_by_path.get(path, {
+                'filePath': path,
+                'title': target['title'],
+                'library': target['library'],
+                'fileSize': target['fileSize'],
+                'issues': [],
+                'quickScanned': False,
+                'scannedAt': datetime.now(timezone.utc).isoformat(),
+            })
+            if 'decode_errors' not in entry['issues']:
+                entry['issues'].append('decode_errors')
+            entry['deepScanned'] = True
+            entry['scannedAt'] = datetime.now(timezone.utc).isoformat()
+            results_by_path[path] = entry
+        else:
+            # DEEP SCAN PASSED — REMOVE decode_errors IF PRESENT, KEEP OTHER ISSUES
+            entry = results_by_path.get(path)
+            if entry:
+                entry['issues'] = [iss for iss in entry['issues'] if iss != 'decode_errors']
+                entry['deepScanned'] = True
+                if not entry['issues']:
+                    results_by_path.pop(path)
+
+    cache_data = _load_health_cache()
+    cache_data['deep_scanned_at'] = datetime.now(timezone.utc).isoformat()
+    cache_data['results'] = list(results_by_path.values())
+    _save_health_cache(cache_data)
+    health_logger.info(f"Deep scan complete: {len(results_by_path)} issues found across {total} files")
+
+
+# ============================================================
 # ROUTES
 # ============================================================
 
