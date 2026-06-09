@@ -195,6 +195,7 @@ const HealthDash = (() => {
 
     function startScan(mode) {
         if (state.scanning) return;
+        state.scanning = true;
         fetch('/filehealth/scan?mode=' + mode, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
@@ -204,9 +205,17 @@ const HealthDash = (() => {
                 }
                 if (data.status === 'started') {
                     startProgressPolling(mode);
+                    return;
                 }
+                // Unexpected response — reset guard
+                state.scanning = false;
             })
-            .catch(err => console.error('[HealthDash] scan start failed:', err));
+            .catch(err => {
+                console.error('[HealthDash] scan start failed:', err);
+                state.scanning = false;
+                const wrap = document.getElementById('healthProgressWrap');
+                if (wrap) wrap.style.display = 'none';
+            });
     }
 
     // --------------------------------------------------------
