@@ -105,6 +105,12 @@ const PAGES = {
         bnavId: 'bnav-size',
         init: () => SizeDash.init(),
     },
+    health: {
+        pageId: 'page-health',
+        navId: 'nav-health',
+        bnavId: 'bnav-health',
+        init: () => HealthDash.init(),
+    },
     settings: {
         pageId: 'page-settings',
         navId: 'nav-settings',
