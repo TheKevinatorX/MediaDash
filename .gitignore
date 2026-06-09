@@ -32,3 +32,5 @@ out/
 *.cache
 .DS_Store
 Thumbs.db
+docker-compose.dev.yml
+.superpowers/
