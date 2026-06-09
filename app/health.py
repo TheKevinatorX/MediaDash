@@ -165,10 +165,9 @@ def _quick_scan_file(target):
         codec_type = s.get('codec_type', '')
         duration = float(s.get('duration', 0) or 0)
         if codec_type == 'video':
+            has_video = True
             if duration == 0:
                 issues.append('zero_duration')
-            else:
-                has_video = True
         elif codec_type == 'audio':
             has_audio = True
 
@@ -193,7 +192,11 @@ def _run_quick_scan():
 
     for i, target in enumerate(targets):
         enrichment.update_progress(QUICK_SCAN_KEY, i + 1, total, step=target['title'])
-        issues = _quick_scan_file(target)
+        try:
+            issues = _quick_scan_file(target)
+        except Exception as e:
+            health_logger.warning(f"Unexpected error scanning {target.get('filePath', '?')}: {e}")
+            continue
         if issues:
             entry = results_by_path.get(target['filePath'], {})
             entry.update({
@@ -243,7 +246,7 @@ def start_scan():
         worker = _run_deep_scan  # defined in Task 4
 
     if enrichment.is_running(key):
-        return jsonify({'status': 'already_running'})
+        return jsonify({'status': 'already_running'}), 409
 
     enrichment.start(key, worker, priority=3)
     return jsonify({'status': 'started'})
