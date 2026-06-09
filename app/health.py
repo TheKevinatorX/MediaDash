@@ -95,6 +95,8 @@ def _collect_scan_targets():
         if not fp or fp in seen:
             continue
         seen.add(fp)
+        if not os.path.isfile(fp):
+            continue
         targets.append({
             'filePath': fp,
             'title': item.get('title', ''),
