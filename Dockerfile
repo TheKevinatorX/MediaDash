@@ -2,9 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# INSTALL CURL FOR HEALTHCHECK
+# INSTALL CURL FOR HEALTHCHECK AND FFMPEG FOR FILE SCANNING
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
+    apt-get install -y --no-install-recommends curl ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 # CACHE DEPENDENCY LAYER BEFORE CODE CHANGES
