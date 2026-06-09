@@ -113,8 +113,10 @@ def _collect_scan_targets():
 def _ffprobe_file(path):
     """
     Run ffprobe on a single file.
-    Returns (success: bool, streams: list) where streams is the parsed JSON
-    array from ffprobe, or an empty list on failure.
+    Returns (success: bool, streams: list, format_duration: float).
+    MKV and many other containers only store duration at the format level,
+    not the stream level — so format_duration is required for zero_duration checks.
+    Returns (False, [], 0.0) on any failure.
     """
     try:
         result = subprocess.run(
@@ -122,6 +124,7 @@ def _ffprobe_file(path):
                 'ffprobe', '-v', 'error',
                 '-print_format', 'json',
                 '-show_streams',
+                '-show_format',
                 path,
             ],
             capture_output=True,
@@ -129,11 +132,12 @@ def _ffprobe_file(path):
             timeout=30,
         )
         if result.returncode != 0 or not result.stdout.strip():
-            return False, []
+            return False, [], 0.0
         data = json.loads(result.stdout)
-        return True, data.get('streams', [])
+        fmt_duration = float(data.get('format', {}).get('duration', 0) or 0)
+        return True, data.get('streams', []), fmt_duration
     except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
-        return False, []
+        return False, [], 0.0
 
 
 def _quick_scan_file(target):
@@ -155,7 +159,7 @@ def _quick_scan_file(target):
         return issues  # no point probing a near-empty file
 
     # CHECK 2: ffprobe can parse the container
-    ok, streams = _ffprobe_file(path)
+    ok, streams, format_duration = _ffprobe_file(path)
     if not ok:
         issues.append('unreadable')
         return issues
@@ -165,11 +169,8 @@ def _quick_scan_file(target):
     has_audio = False
     for s in streams:
         codec_type = s.get('codec_type', '')
-        duration = float(s.get('duration', 0) or 0)
         if codec_type == 'video':
             has_video = True
-            if duration == 0:
-                issues.append('zero_duration')
         elif codec_type == 'audio':
             has_audio = True
 
@@ -177,6 +178,12 @@ def _quick_scan_file(target):
         issues.append('no_video_stream')
     if not has_audio:
         issues.append('no_audio_stream')
+
+    # CHECK 4: zero duration — use format-level duration as the authoritative source.
+    # Stream-level duration is absent in many containers (MKV, etc.), so checking
+    # only stream duration produces large numbers of false positives.
+    if format_duration == 0.0:
+        issues.append('zero_duration')
 
     return issues
 
