@@ -1689,8 +1689,9 @@ th.sorted-desc .sort-indicator::after { content: '\2193'; opacity: 1; }
 }
 
 .row-num-col {
-    width: 28px;
-    min-width: 16px;
+    width: 28px !important;
+    min-width: 28px !important;
+    max-width: 28px !important;
     text-align: right;
     padding: 10px 6px 10px 2px !important;
     cursor: default;
@@ -1699,6 +1700,10 @@ th.sorted-desc .sort-indicator::after { content: '\2193'; opacity: 1; }
     font-weight: 400;
     letter-spacing: 0;
     text-transform: none;
+}
+
+th.row-num-col .resize-handle {
+    display: none;
 }
 
 .row-num {
@@ -5271,4 +5276,118 @@ html[data-theme="light"] .phub-close:hover {
 @keyframes overlay-fade-in {
     from { opacity: 0; }
     to   { opacity: 1; }
+}
+
+/* ============================================================
+   HEALTH PAGE
+   ============================================================ */
+
+.health-controls {
+    margin-bottom: 1.5rem;
+}
+
+.health-scan-btn-group {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.health-scan-action {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.health-last-scanned {
+    font-size: 0.75rem;
+    color: var(--text-muted, #6b7280);
+}
+
+.health-progress-wrap {
+    margin-bottom: 1.25rem;
+}
+
+.health-progress-label {
+    font-size: 0.8rem;
+    color: var(--text-muted, #6b7280);
+    margin-bottom: 0.4rem;
+}
+
+.health-progress-bar-track {
+    height: 6px;
+    background: var(--surface-2, #1e1e2e);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.health-progress-bar-fill {
+    height: 100%;
+    background: #dc2626;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.health-stale-warning {
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    color: #eab308;
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.health-summary-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.875rem;
+    color: var(--text-secondary, #9ca3af);
+    margin-bottom: 1.25rem;
+}
+
+.health-summary-sep {
+    opacity: 0.4;
+}
+
+.health-issue-badge {
+    display: inline-block;
+    background: rgba(220, 38, 38, 0.15);
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: 4px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: default;
+    margin: 0.1rem;
+}
+
+.health-scan-depth {
+    font-size: 0.78rem;
+    color: var(--text-muted, #6b7280);
+    font-style: italic;
+}
+
+.health-empty-state,
+.health-no-scan-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem 1rem;
+    color: var(--text-secondary, #9ca3af);
+    text-align: center;
+}
+
+.health-empty-state p,
+.health-no-scan-state p {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.health-table-wrap {
+    overflow-x: auto;
 }
