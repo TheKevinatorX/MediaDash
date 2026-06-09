@@ -65,9 +65,11 @@ def favicon():
 # REGISTER BLUEPRINTS AFTER APP CREATION TO AVOID CIRCULAR IMPORTS
 from naming import naming_bp  # noqa: E402
 from size import size_bp  # noqa: E402
+from health import health_bp  # noqa: E402
 
 app.register_blueprint(naming_bp, url_prefix='/naming')
 app.register_blueprint(size_bp, url_prefix='/size')
+app.register_blueprint(health_bp, url_prefix='/filehealth')
 
 # LOAD DISK CACHE ONLY — REFRESHING FROM PLEX IS USER-TRIGGERED VIA SYNC
 from shared import startup_prewarm  # noqa: E402
