@@ -51,9 +51,13 @@ def _load_health_cache():
 def _save_health_cache(data):
     """Atomically write health cache to disk."""
     tmp = HEALTH_CACHE_FILE + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(data, f)
-    os.replace(tmp, HEALTH_CACHE_FILE)
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+        os.replace(tmp, HEALTH_CACHE_FILE)
+    except OSError as e:
+        health_logger.error(f"Could not write health cache: {e}")
+        raise
 
 
 # ============================================================
@@ -68,7 +72,8 @@ def _all_cached_items():
         try:
             with open(cache_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as e:
+            health_logger.warning(f"Skipping unreadable cache file {cache_file}: {e}")
             continue
         for key, entry in data.items():
             if not key.startswith('search:'):
