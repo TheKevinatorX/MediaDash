@@ -30,6 +30,7 @@
                 <a href="#home" class="nav-link" id="nav-home">Home</a>
                 <a href="#naming" class="nav-link" id="nav-naming">Naming</a>
                 <a href="#size" class="nav-link" id="nav-size">Sizes</a>
+                <a href="#health" class="nav-link" id="nav-health">Health</a>
             </nav>
             <div class="header-right">
                 <div class="header-actions" id="headerActions">
@@ -378,6 +379,83 @@
                     </thead>
                     <tbody id="sizeEpisodesBody"></tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- HEALTH PAGE -->
+        <div id="page-health" class="page" style="display:none;">
+            <div class="page-container">
+                <div class="page-header">
+                    <h2 class="page-title">File Health</h2>
+                    <p class="page-subtitle">Scan your media files for corruption, missing streams, and playback issues.</p>
+                </div>
+
+                <!-- SCAN CONTROLS -->
+                <div class="health-controls">
+                    <div class="health-scan-btn-group">
+                        <div class="health-scan-action">
+                            <button class="btn btn-primary" id="quickScanBtn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                Quick Scan
+                            </button>
+                            <span class="health-last-scanned" id="quickLastScanned"></span>
+                        </div>
+                        <div class="health-scan-action">
+                            <button class="btn btn-ghost" id="deepScanBtn" title="Decodes every file end-to-end. May take 30–60+ minutes on large libraries.">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                Deep Scan
+                            </button>
+                            <span class="health-last-scanned" id="deepLastScanned"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROGRESS BAR (hidden when idle) -->
+                <div class="health-progress-wrap" id="healthProgressWrap" style="display:none;">
+                    <div class="health-progress-label" id="healthProgressLabel">Scanning...</div>
+                    <div class="health-progress-bar-track">
+                        <div class="health-progress-bar-fill" id="healthProgressFill" style="width:0%"></div>
+                    </div>
+                </div>
+
+                <!-- STALE WARNING -->
+                <div class="health-stale-warning" id="healthStaleWarning" style="display:none;"></div>
+
+                <!-- SUMMARY BAR -->
+                <div class="health-summary-bar" id="healthSummaryBar" style="display:none;">
+                    <span id="healthSummaryScanned"></span>
+                    <span class="health-summary-sep">·</span>
+                    <span id="healthSummaryIssues"></span>
+                    <span class="health-summary-sep">·</span>
+                    <span id="healthSummaryClean"></span>
+                </div>
+
+                <!-- RESULTS TABLE -->
+                <div class="health-table-wrap" id="healthTableWrap" style="display:none;">
+                    <table class="data-table" id="healthTable">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-col="title">Title</th>
+                                <th class="sortable" data-col="library">Library</th>
+                                <th class="sortable" data-col="fileSize">File Size</th>
+                                <th>Issues</th>
+                                <th>Scan Depth</th>
+                            </tr>
+                        </thead>
+                        <tbody id="healthTableBody"></tbody>
+                    </table>
+                </div>
+
+                <!-- EMPTY STATE -->
+                <div class="health-empty-state" id="healthEmptyState" style="display:none;">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                    <p>All files healthy — no issues found.</p>
+                </div>
+
+                <!-- NO SCAN YET STATE -->
+                <div class="health-no-scan-state" id="healthNoScanState">
+                    <p>No scan has been run yet. Click <strong>Quick Scan</strong> to start.</p>
+                </div>
             </div>
         </div>
 
