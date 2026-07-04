@@ -14,14 +14,14 @@ import queue
 from threading import Lock, Thread
 
 import requests.exceptions
+from flask import jsonify
 from plexapi.server import PlexServer
 from plexapi.exceptions import Unauthorized
 
-# ============================================================
+#==============
 # LOGGING SETUP
-# ============================================================
-
-# CONFIGURE ROOT LOGGER FROM ENVIRONMENT
+#==============
+# Configure root logger from environment
 def setup_logging():
     log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
     log_format = '%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s'
@@ -34,7 +34,7 @@ def setup_logging():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    # SILENCE NOISY THIRD PARTY LOGGERS
+    # Silence noisy third-party loggers
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('plexapi').setLevel(logging.WARNING)
 
@@ -43,11 +43,11 @@ def setup_logging():
 
 logger = setup_logging()
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
-
-# STRIP TRAILING SLASH FROM URL
+#===================
+# USER CONFIGURATION
+#===================
+# Defaults below come from env vars; the settings page can override them at runtime.
+# Strip trailing slash from URL
 PLEX_URL = os.environ.get('PLEX_URL', '').rstrip('/')
 PLEX_TOKEN = os.environ.get('PLEX_TOKEN', '')
 try:
@@ -75,10 +75,7 @@ SPECIAL_CHAR_REPLACEMENT = os.environ.get('SPECIAL_CHAR_REPLACEMENT', ' - ')
 
 SELECTED_LIBRARIES = []
 
-def is_library_selected(title):
-    return not SELECTED_LIBRARIES or title in SELECTED_LIBRARIES
-
-# COMMA-SEPARATED SHOW TITLES TO ALWAYS EXCLUDE FROM NAMING RESULTS
+# Comma-separated show titles to always exclude from naming results
 _excluded_raw = os.environ.get('EXCLUDED_SHOWS', '')
 EXCLUDED_SHOWS = {s.strip().lower() for s in _excluded_raw.split(',') if s.strip()}
 
@@ -91,20 +88,26 @@ CACHE_DIR = os.environ.get('CACHE_DIR', '/data/cache')
 DISK_CACHE_PATH = os.path.join(CACHE_DIR, 'plex_cache.json')
 SETTINGS_FILE = os.path.join(CACHE_DIR, 'settings.json')
 
+#---------------------------------------------------------------
+# DO NOT MODIFY BEYOND THIS LINE UNLESS CHANGING LOGIC
+#---------------------------------------------------------------
+
+def is_library_selected(title):
+    return not SELECTED_LIBRARIES or title in SELECTED_LIBRARIES
+
 APP_START_TIME = time.time()
 
 
-# ============================================================
-# USER SETTINGS (overrides env vars, persisted to SETTINGS_FILE)
-# ============================================================
-
+#===============================================================
+# USER SETTINGS (OVERRIDES ENV VARS, PERSISTED TO SETTINGS_FILE)
+#===============================================================
 def _load_settings_file():
     try:
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Could not load settings file: {SETTINGS_FILE} ({e})")
     return {}
 
 
@@ -152,6 +155,32 @@ def save_user_settings(plex_url=None, plex_token=None, episode_format=None,
         return False
 
 
+def get_column_setting(key):
+    s = _load_settings_file()
+    column_settings = s.get('column_settings')
+    if not isinstance(column_settings, dict):
+        return None
+    value = column_settings.get(key)
+    return value if isinstance(value, dict) else None
+
+
+def save_column_setting(key, value):
+    try:
+        current = _load_settings_file()
+        column_settings = current.get('column_settings')
+        if not isinstance(column_settings, dict):
+            column_settings = {}
+        column_settings[key] = value
+        current['column_settings'] = column_settings
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(current, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f'Failed to save column setting {key}: {e}')
+        return False
+
+
 def get_user_settings():
     s = _load_settings_file()
     url = s.get('plex_url') or os.environ.get('PLEX_URL', '')
@@ -171,7 +200,7 @@ def get_user_settings():
     }
 
 
-# APPLY SETTINGS FILE OVERRIDES AT MODULE LOAD TIME
+# Apply settings file overrides at module load time
 _startup_s = _load_settings_file()
 if _startup_s.get('plex_url'):
     PLEX_URL = _startup_s['plex_url'].rstrip('/')
@@ -193,11 +222,10 @@ if _startup_s.get('tmdb_api_key') is not None:
     TMDB_API_KEY = str(_startup_s['tmdb_api_key'])
 del _startup_s
 
-# ============================================================
+#===================
 # STARTUP VALIDATION
-# ============================================================
-
-# VERIFY REQUIRED ENVIRONMENT VARIABLES OR EXIT
+#===================
+# Verify required environment variables or exit
 def validate_environment():
     ok = True
     if not PLEX_URL:
@@ -218,11 +246,10 @@ def validate_environment():
     masked_token = PLEX_TOKEN[:4] + '****' if len(PLEX_TOKEN) > 4 else '****'
     logger.info(f'Configuration: PLEX_URL={PLEX_URL}, PLEX_TOKEN={masked_token}, CACHE_TTL={CACHE_TTL}s, EPISODE_FORMAT={EPISODE_FORMAT}')
 
-# ============================================================
+#======
 # CACHE
-# ============================================================
-
-# TTL-BASED IN-MEMORY CACHE WITH THREAD-SAFE LOCKING AND DISK PERSISTENCE
+#======
+# TTL-based in-memory cache with thread-safe locking and disk persistence
 class PlexCache:
     def __init__(self, ttl_seconds=900):
         self.ttl = ttl_seconds
@@ -230,7 +257,7 @@ class PlexCache:
         self._lock = Lock()
         self._logger = logging.getLogger('mediadash.cache')
 
-    # RETURN CACHED ENTRY IF FRESH OR NONE IF EXPIRED
+    # Return cached entry if fresh or None if expired
     def get(self, key):
         with self._lock:
             entry = self._data.get(key)
@@ -241,7 +268,7 @@ class PlexCache:
                 self._logger.info(f"Cache expired for '{key}'")
             return None
 
-    # STORE ITEMS WITH CURRENT TIMESTAMP AND PERSIST TO DISK
+    # Store items with current timestamp and persist to disk
     def set(self, key, items, library_type):
         with self._lock:
             self._data[key] = {
@@ -252,7 +279,7 @@ class PlexCache:
             self._logger.info(f"Cached {len(items)} items for '{key}'")
         self._save_to_disk()
 
-    # REMOVE ONE CACHE ENTRY OR FLUSH ALL, THEN PERSIST
+    # Remove one cache entry or flush all, then persist
     def invalidate(self, key=None):
         with self._lock:
             if key:
@@ -263,7 +290,7 @@ class PlexCache:
                 self._logger.info('All caches invalidated')
         self._save_to_disk()
 
-    # RETURN CACHED ENTRY EVEN IF EXPIRED — SERVE STALE DATA WHILE BACKGROUND REFRESH RUNS
+    # Return cached entry even if expired — serve stale data while background refresh runs
     # Returns None only when no entry exists at all (true first-run / post-invalidate).
     def get_stale(self, key):
         with self._lock:
@@ -273,7 +300,7 @@ class PlexCache:
             age = time.time() - entry['ts']
             return {**entry, 'is_stale': age >= self.ttl, 'age_seconds': round(age)}
 
-    # BUILD CACHE STATS FOR HEALTH ENDPOINT
+    # Build cache stats for health endpoint
     def stats(self):
         with self._lock:
             now = time.time()
@@ -287,26 +314,26 @@ class PlexCache:
                 for k, v in self._data.items()
             }
 
-    # RETURN ALL ENTRIES (FRESH OR STALE) WHOSE KEY STARTS WITH PREFIX — AVOIDS REACHING INTO ._lock/._data
+    # Return all entries (fresh or stale) whose key starts with prefix — avoids reaching into ._lock/._data
     def entries_by_prefix(self, prefix):
         with self._lock:
             return {k: dict(v) for k, v in self._data.items() if k.startswith(prefix)}
 
-    # MAP A CACHE KEY TO ITS LIBRARY NAME FOR FILE GROUPING
+    # Map a cache key to its library name for file grouping
     # 'search:TV Shows' → 'TV Shows', '__home_summary__' → '__home_summary__'
     def _library_name_from_key(self, key):
         if ':' in key:
             return key.split(':', 1)[1]
         return key
 
-    # CONVERT A LIBRARY NAME TO A SAFE CACHE FILENAME
+    # Convert a library name to a safe cache filename
     # 'TV Shows' → '<cache_dir>/tv_shows_cache.json'
     def _cache_file_for_library(self, library_name):
         safe = re.sub(r'[^\w]', '_', library_name.lower()).strip('_')
         safe = re.sub(r'_+', '_', safe)
         return os.path.join(CACHE_DIR, f'{safe}_cache.json')
 
-    # WRITE ONE JSON FILE PER LIBRARY — REMOVES STALE FILES AUTOMATICALLY
+    # Write one JSON file per library — removes stale files automatically
     def _save_to_disk(self):
         try:
             os.makedirs(CACHE_DIR, exist_ok=True)
@@ -316,13 +343,13 @@ class PlexCache:
                     for k, v in self._data.items()
                 }
 
-            # GROUP ENTRIES BY LIBRARY NAME
+            # Group Entries BY Library NAME
             groups = {}
             for key, entry in data_copy.items():
                 lib_name = self._library_name_from_key(key)
                 groups.setdefault(lib_name, {})[key] = entry
 
-            # WRITE ONE FILE PER GROUP ATOMICALLY
+            # Write ONE FILE PER Group Atomically
             written_files = set()
             for lib_name, entries in groups.items():
                 path = self._cache_file_for_library(lib_name)
@@ -332,7 +359,7 @@ class PlexCache:
                 os.replace(tmp_path, path)
                 written_files.add(path)
 
-            # REMOVE ANY CACHE FILES NO LONGER REPRESENTED IN MEMORY
+            # Remove any cache files no longer represented in memory
             for path in glob.glob(os.path.join(CACHE_DIR, '*_cache.json')):
                 if path not in written_files:
                     try:
@@ -344,13 +371,13 @@ class PlexCache:
         except Exception as e:
             self._logger.warning(f"Failed to save cache to disk: {e}")
 
-    # LOAD CACHE FROM DISK ON STARTUP — STALE ENTRIES KEPT FOR IMMEDIATE SERVING
+    # Load cache from disk on startup — stale entries kept for immediate serving
     # Reads all *_cache.json files; auto-migrates from legacy plex_cache.json.
     def load_from_disk(self):
         os.makedirs(CACHE_DIR, exist_ok=True)
         cache_files = glob.glob(os.path.join(CACHE_DIR, '*_cache.json'))
 
-        # MIGRATE FROM LEGACY SINGLE-FILE FORMAT IF NO PER-LIBRARY FILES EXIST
+        # Migrate from legacy single-file format if no per-library files exist
         is_migration = False
         if not cache_files and os.path.exists(DISK_CACHE_PATH):
             cache_files = [DISK_CACHE_PATH]
@@ -395,38 +422,34 @@ class PlexCache:
 
         return loaded
 
-# ============================================================
-# SYNC PROGRESS (imported from sync_progress.py)
-# ============================================================
-
+#===============================================
+# SYNC PROGRESS (IMPORTED FROM SYNC_PROGRESS.PY)
+#===============================================
 from sync_progress import (
     BackgroundEnrichment,
     PRIO_SYNC,
 )
 
-# ============================================================
+#==================
 # SHARED SINGLETONS
-# ============================================================
-
+#==================
 cache = PlexCache(ttl_seconds=CACHE_TTL)
 enrichment = BackgroundEnrichment()
 
 
-# ============================================================
+#=================
 # STARTUP PRE-WARM
-# ============================================================
-
-# LOAD DISK CACHE ONLY — PLEX REFRESH IS USER-TRIGGERED VIA SYNC
+#=================
+# Load disk cache only — Plex refresh is user-triggered via sync
 def startup_prewarm(cache_obj, enrichment_obj):
     _logger = logging.getLogger('mediadash.startup')
     loaded = cache_obj.load_from_disk()
     _logger.info(f"Startup: loaded {loaded} cache entries from disk; automatic Plex prewarm disabled")
 
-# ============================================================
+#================
 # PLEX CONNECTION
-# ============================================================
-
-# SINGLETON PLEX CLIENT WITH LAZY INITIALIZATION
+#================
+# Singleton PLEX client with lazy initialization
 _plex = None
 _plex_lock = Lock()
 
@@ -448,14 +471,14 @@ def get_plex():
         return _plex
 
 
-# FORCE RECONNECT ON NEXT REQUEST
+# Force reconnect on next request
 def reset_plex():
     global _plex
     with _plex_lock:
         _plex = None
 
 
-# RETRY WRAPPER WITH AUTOMATIC RECONNECTION ON TRANSIENT NETWORK ERRORS
+# Retry wrapper with automatic reconnection on transient network errors
 def with_plex_retry(fn):
     try:
         return fn(get_plex())
@@ -464,11 +487,24 @@ def with_plex_retry(fn):
         reset_plex()
         return fn(get_plex())
 
-# ============================================================
-# FORMATTER HELPERS
-# ============================================================
 
-# CONVERT MILLISECONDS TO HUMAN READABLE DURATION
+# Run a plex-backed route body with retry + standard error responses
+# `fetch_fn` receives a connected Plex instance and returns a Flask response.
+# Bad token -> 401. Any other failure logs `log_context` and returns a 500
+# whose message starts with `error_prefix`.
+def plex_api_call(fetch_fn, api_logger, log_context, error_prefix):
+    try:
+        return with_plex_retry(fetch_fn)
+    except Unauthorized:
+        return jsonify({'error': 'Authentication failed. Check your PLEX_TOKEN.'}), 401
+    except Exception as e:
+        api_logger.error(f'{log_context}: {e}')
+        return jsonify({'error': f'{error_prefix}: {e}'}), 500
+
+#=============================
+# DURATION AND SIZE FORMATTERS
+#=============================
+# Convert milliseconds to human readable duration
 # Used by the Summary page. Keep this long-form output stable.
 def format_duration(ms):
     if not ms:
@@ -508,7 +544,7 @@ def format_duration(ms):
         return f'{total_hours} {"hour" if total_hours == 1 else "hours"}, {remaining_min} {"minute" if remaining_min == 1 else "minutes"}' if total_hours else f'{remaining_min} {"minute" if remaining_min == 1 else "minutes"}'
 
 
-# CONVERT MILLISECONDS TO SHORT DISPLAY DURATION
+# Convert milliseconds to short display duration
 # Used by table-heavy pages where narrower columns matter.
 def format_duration_short(ms):
     if not ms:
@@ -541,7 +577,7 @@ def format_duration_short(ms):
     return ', '.join(parts) if parts else '0sec'
 
 
-# CONVERT BYTES TO HUMAN READABLE SIZE
+# Convert bytes to human readable size
 def format_bytes(size):
     if not size:
         return None
@@ -552,7 +588,7 @@ def format_bytes(size):
     return f'{size:.1f} PB'
 
 
-# FORMAT DATETIME TO YYYY-MM-DD HH:MM
+# Format datetime to yyyy-mm-dd hh:mm
 def format_date(dt):
     if not dt:
         return None
@@ -561,7 +597,7 @@ def format_date(dt):
     return str(dt)
 
 
-# MAP CHANNEL COUNT TO DISPLAY STRING
+# Map channel count to display string
 def format_channels(ch):
     if not ch:
         return None
@@ -569,12 +605,11 @@ def format_channels(ch):
     return mapping.get(ch, f'{ch}ch')
 
 
-# ============================================================
-# SHARED LIBRARY LISTING HELPERS
-# ============================================================
-
-# BUILD LIBRARY LIST FROM CACHED SEARCH ENTRIES — NO PLEX CALL
-# `allowed_types` MAY BE A DICT (e.g. EXTRACTORS) OR A SET/LIST OF TYPE NAMES
+#======================
+# LIBRARY LIST RESPONSE
+#======================
+# Build library list from cached search entries — no PLEX call
+# `allowed_types` may be a dict (e.g. EXTRACTORS) or a set/list of type names
 def _libraries_from_cache(allowed_types):
     libraries = []
     for key, entry in sorted(cache.entries_by_prefix('search:').items()):
@@ -590,7 +625,7 @@ def _libraries_from_cache(allowed_types):
     return libraries
 
 
-# BUILD LIBRARY LIST FROM A LIVE PLEX CONNECTION
+# Build library list from a live PLEX connection
 def _libraries_from_plex(plex, allowed_types, logger=None):
     libraries = []
     found_any = False
@@ -611,7 +646,24 @@ def _libraries_from_plex(plex, allowed_types, logger=None):
     return libraries
 
 
-# FETCH MOVIE SECTION ITEMS WITH SUBTITLE/AUDIO/VIDEO STREAM METADATA INCLUDED
+# Standard /libraries route body — cache first, then live PLEX with retry
+# `extra` fields are merged into the JSON payload alongside 'libraries'.
+def libraries_response(allowed_types, api_logger, extra=None):
+    extra = extra or {}
+    libs = _libraries_from_cache(allowed_types)
+    if libs:
+        return jsonify({'libraries': libs, **extra})
+
+    # Cold path: no cache yet — connect to PLEX
+    def _fetch(plex):
+        libraries = _libraries_from_plex(plex, allowed_types, logger=api_logger)
+        api_logger.info(f'Found {len(libraries)} supported libraries')
+        return jsonify({'libraries': libraries, **extra})
+
+    return plex_api_call(_fetch, api_logger, 'Failed to fetch libraries', 'Failed to connect to Plex')
+
+
+# Fetch movie section items with subtitle/audio/video stream metadata included
 # (Required for movie subtitle and stream details — Plex omits Stream elements by default.)
 def fetch_movies_with_streams(section, maxresults=None):
     url = f'/library/sections/{section.key}/all?includeElements=Stream'
@@ -620,7 +672,7 @@ def fetch_movies_with_streams(section, maxresults=None):
     return section.fetchItems(url)
 
 
-# NORMALIZE VALUES FOR STABLE MIXED-TYPE SORTING
+# Normalize values for stable mixed-type sorting
 def sort_key_fn(value):
     if value is None:
         return (0, '')

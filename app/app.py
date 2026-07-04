@@ -3,7 +3,10 @@
 ############################
 
 import os
+import re
+import subprocess
 import time
+from urllib.parse import urlencode
 
 from flask import Flask, jsonify, render_template, request, redirect, send_from_directory
 from flask_compress import Compress
@@ -17,6 +20,8 @@ from shared import (
     reset_plex,
     validate_environment,
     save_user_settings,
+    get_column_setting,
+    save_column_setting,
     get_user_settings,
     APP_START_TIME,
     MOVIE_LABEL,
@@ -26,16 +31,15 @@ from shared import (
     PRIO_SYNC,
 )
 
-# ============================================================
+#============
 # APP FACTORY
-# ============================================================
-
-# VALIDATE REQUIRED ENV VARS AT STARTUP — EXITS IF MISSING
+#============
+# Validate required env vars at startup — exits if missing
 validate_environment()
 
 app = Flask(__name__)
 
-# COMPRESS JSON/TEXT RESPONSES — SHRINKS LARGE NAMING/SIZE PAYLOADS FOR SLOW MOBILE LINKS
+# Compress JSON/text responses — shrinks large naming/size payloads for slow mobile links
 Compress(app)
 
 
@@ -62,7 +66,7 @@ def favicon():
     )
 
 
-# REGISTER BLUEPRINTS AFTER APP CREATION TO AVOID CIRCULAR IMPORTS
+# Register blueprints after app creation to avoid circular imports
 from naming import naming_bp  # noqa: E402
 from size import size_bp  # noqa: E402
 from health import health_bp  # noqa: E402
@@ -71,51 +75,22 @@ app.register_blueprint(naming_bp, url_prefix='/naming')
 app.register_blueprint(size_bp, url_prefix='/size')
 app.register_blueprint(health_bp, url_prefix='/filehealth')
 
-# LOAD DISK CACHE ONLY — REFRESHING FROM PLEX IS USER-TRIGGERED VIA SYNC
+# Load disk cache only — refreshing from PLEX is user-triggered via sync
 from shared import startup_prewarm  # noqa: E402
 startup_prewarm(cache, enrichment)
 
+# Pre-walk media mounts in the background so the health page loads instantly,
+# and auto-resume any explicitly-started work that was interrupted by a restart/outage.
+from health import resume_incomplete_scans, warm_health_caches  # noqa: E402
+from plex_sync import resume_incomplete_syncs  # noqa: E402
+warm_health_caches()
+resume_incomplete_scans()
+resume_incomplete_syncs()
 
-def _startup_auto_sync():
-    """If the on-disk cache is empty or fully stale, kick off a full Plex sync
-    at container startup so the dashboard has data without requiring a manual
-    click. Runs in a daemon thread so it doesn't block Flask from serving."""
-    from threading import Thread
-
-    def _run():
-        import time as _t
-        _t.sleep(2)  # Brief pause so Flask finishes initializing first
-
-        if not _shared.PLEX_URL or not _shared.PLEX_TOKEN:
-            logger.info('Startup auto-sync skipped: Plex not configured')
-            return
-
-        search_entries = cache.entries_by_prefix('search:')
-        now = _t.time()
-        all_stale = not search_entries or all(
-            (now - entry.get('ts', 0)) >= _shared.CACHE_TTL
-            for entry in search_entries.values()
-        )
-        if not all_stale:
-            logger.info('Startup auto-sync skipped: cache is warm')
-            return
-
-        from plex_sync import start_full_sync
-        if start_full_sync():
-            logger.info('Startup auto-sync: cache cold/stale, full sync started')
-        else:
-            logger.info('Startup auto-sync: sync already running')
-
-    Thread(target=_run, daemon=True, name='startup-auto-sync').start()
-
-
-_startup_auto_sync()
-
-# ============================================================
-# HOME SUMMARY HELPERS
-# ============================================================
-
-# CHECK NAMING CACHE FOR HEALTH STATS — SERVES STALE DATA WHEN FRESH ENTRY IS UNAVAILABLE
+#======================
+# HOME SUMMARY BUILDERS
+#======================
+# Check naming cache for health stats — serves stale data when fresh entry is unavailable
 def _compute_naming_health(library_title):
     key = f'naming:{library_title}'
     entry = cache.get_stale(key)  # one atomic read; returns fresh or stale, None only if absent
@@ -139,14 +114,13 @@ def _compute_naming_health(library_title):
     }
 
 
-# ============================================================
+#===================
 # HOME SUMMARY ROUTE
-# ============================================================
-
-# COMPUTE LIBRARY STATS FROM BROWSE CACHE ITEMS — NO PLEX CALL
+#===================
+# Compute library stats from browse cache items — no PLEX call
 def _summarize_from_cache(library_title, library_type):
     key = f'search:{library_title}'
-    # GET FRESH OR STALE — STALE DISK-LOADED ENTRIES PAST TTL STILL USABLE FOR HOME SUMMARY
+    # Get fresh or stale — stale disk-loaded entries past TTL still usable for home summary
     entry = cache.get(key) or cache.get_stale(key)
     if not entry:
         return None
@@ -185,7 +159,7 @@ def _summarize_from_cache(library_title, library_type):
         }
 
 
-# INITIAL TOTALS BUCKET FOR HOME SUMMARY ROUTES
+# Initial totals bucket for home summary routes
 def _empty_totals():
     return {
         'movieCount': 0, 'showCount': 0, 'seasonCount': 0, 'episodeCount': 0,
@@ -195,7 +169,7 @@ def _empty_totals():
     }
 
 
-# ACCUMULATE PER-LIBRARY STATS INTO THE RUNNING TOTALS
+# Accumulate per-library stats into the running totals
 def _accumulate_totals(totals, lib_type, stats):
     if lib_type == 'movie':
         totals['movieCount'] += stats.get('count', 0)
@@ -209,14 +183,14 @@ def _accumulate_totals(totals, lib_type, stats):
         totals['totalEpisodeDuration'] += stats.get('totalDuration', 0)
 
 
-# FORMAT IN-PLACE THE SIZE/DURATION FIELDS OF A TOTALS DICT
+# Format in-place the size/duration fields of a totals dict
 def _finalize_totals(totals):
     totals['totalSizeFormatted'] = format_bytes(totals['totalSize'])
     totals['totalMovieDurationFormatted'] = format_duration(totals['totalMovieDuration'])
     totals['totalEpisodeDurationFormatted'] = format_duration(totals['totalEpisodeDuration'])
 
 
-# BUILD SUMMARY FROM ALL WARM BROWSE CACHE ENTRIES (PLEX OFFLINE FALLBACK)
+# Build summary from all warm browse cache entries plexx offline fallback)
 def _build_summary_from_search_cache():
     search_entries = cache.entries_by_prefix('search:')
     if not search_entries:
@@ -244,18 +218,18 @@ def _build_summary_from_search_cache():
 
 @app.route('/api/home/summary')
 def home_summary():
-    # RETURN CACHED SUMMARY IF FRESH
+    # Return cached summary if fresh
     cached = cache.get('__home_summary__')
     if cached:
         summary = cached['items'][0]
         return jsonify({'summary': summary, 'cached': True})
 
-    # FAST PATH: BUILD FROM WARM BROWSE CACHE — NO PLEX WORK DURING NAVIGATION
+    # Fast path: build from warm browse cache — no PLEX work during navigation
     search_summary = _build_summary_from_search_cache()
     if search_summary:
         return jsonify({'summary': search_summary, 'cached': False, 'stale': True})
 
-    # COLD PATH: NO BROWSE CACHE AT ALL — NEED PLEX TO BOOTSTRAP
+    # Cold path: no browse cache at all — need PLEX to bootstrap
     try:
         plex = get_plex()
         sections = plex.library.sections()
@@ -301,10 +275,9 @@ def home_summary():
     return jsonify({'summary': summary, 'cached': False})
 
 
-# ============================================================
+#=====================================================
 # QUICK SUMMARY ROUTE — RETURNS IMMEDIATELY FROM CACHE
-# ============================================================
-
+#=====================================================
 def _build_quicksummary_lib_entry(library_title, lib_type):
     """Build a single library entry for the quicksummary response.
 
@@ -327,7 +300,7 @@ def home_quicksummary():
     libraries = []
     totals = _empty_totals()
 
-    # FAST PATH: BUILD FROM SEARCH CACHE — NO PLEX API CALL
+    # Fast path: build from search cache — no PLEX API call
     search_entries = cache.entries_by_prefix('search:')
     if search_entries:
         for key, entry in search_entries.items():
@@ -344,7 +317,7 @@ def home_quicksummary():
                    'labels': {'movie': MOVIE_LABEL, 'show': SHOW_LABEL}}
         return jsonify({'summary': summary, 'cached': False})
 
-    # COLD PATH: SEARCH CACHE EMPTY — NEED PLEX FOR LIBRARY LIST ONLY
+    # Cold path: search cache empty — need Plex for library list only
     try:
         plex = get_plex()
         sections = [s for s in plex.library.sections() if s.type in ('movie', 'show')]
@@ -367,10 +340,9 @@ def home_quicksummary():
     return jsonify({'summary': summary, 'cached': False})
 
 
-# ============================================================
+#=================
 # HOME STATS ROUTE
-# ============================================================
-
+#=================
 @app.route('/api/home/stats')
 def home_stats():
     search_entries = cache.entries_by_prefix('search:')
@@ -393,7 +365,7 @@ def home_stats():
 
     LABEL_TO_KEY = {'4K': '4k', '1080p': '1080', '720p': '720', '480p': '480', 'SD': 'sd'}
 
-    # SMALL HELPER: INCREMENT BUCKET COUNT IF VALUE NON-EMPTY
+    # Small helper: increment bucket count if value non-empty
     def _bump(d, key):
         if key:
             d[key] = d.get(key, 0) + 1
@@ -427,7 +399,7 @@ def home_stats():
             for g in item.get('genres', []) or []:
                 _bump(genres, g)
 
-            # SUBTITLE COVERAGE — BOTH LIBRARY TYPES
+            # Subtitle Coverage — BOTH Library Types
             if (item.get('subtitleCount') or 0) > 0:
                 subtitles_with += 1
                 if lib_type == 'movie':
@@ -442,13 +414,13 @@ def home_stats():
                 subtitles_without += 1
 
             if lib_type == 'movie':
-                # AUDIO CHANNELS — MOVIES ONLY
+                # Audio channels — movies only
                 ch = item.get('audioChannels')
                 if ch is not None:
                     ch_label = {2: '2.0', 6: '5.1', 8: '7.1'}.get(int(ch), f'{ch}ch')
                     _bump(audio_channels, ch_label)
             else:
-                # SHOW STATUS / STUDIOS / CONTENT RATINGS — SHOWS ONLY
+                # Show status / studios / content ratings — shows only
                 _bump(show_statuses, item.get('showStatus'))
                 _bump(show_studios, item.get('studio'))
                 _bump(show_content_ratings, item.get('contentRating'))
@@ -477,10 +449,9 @@ def home_stats():
     return jsonify({'stats': stats, 'cached': True})
 
 
-# ============================================================
+#=====================
 # SHARED CACHE REFRESH
-# ============================================================
-
+#=====================
 @app.route('/api/progress')
 def get_progress():
     tasks = enrichment.get_all_active()
@@ -525,10 +496,9 @@ def trigger_library_sync(title):
     return jsonify({'status': 'already_running' if status in ('pending', 'running') else 'started', 'key': key})
 
 
-# ============================================================
+#=============
 # HEALTH CHECK
-# ============================================================
-
+#=============
 @app.route('/api/health')
 def health():
     uptime = round(time.time() - APP_START_TIME)
@@ -555,19 +525,103 @@ def health():
     })
 
 
-# ============================================================
+#========
 # VERSION
-# ============================================================
+#========
+DEFAULT_GHCR_IMAGE = 'ghcr.io/thekevinatorx/mediadash'
 
-@app.route('/api/version')
-def version():
+
+def _read_version_file():
     try:
         version_file = os.path.join(app.root_path, 'VERSION')
         with open(version_file, 'r', encoding='utf-8') as f:
-            ver = f.read().strip()
-    except Exception:
-        ver = 'unknown'
-    return jsonify({'version': ver})
+            return f.read().strip() or 'unknown'
+    except Exception as e:
+        logger.warning(f"Could not read VERSION file: {e}")
+        return 'unknown'
+
+
+def _git_short_sha():
+    env_sha = (
+        os.environ.get('MEDIADASH_GIT_SHA')
+        or os.environ.get('GIT_SHA')
+        or os.environ.get('SOURCE_COMMIT')
+    )
+    if env_sha:
+        return env_sha[:12]
+
+    try:
+        repo_root = os.path.abspath(os.path.join(app.root_path, '..'))
+        out = subprocess.check_output(
+            ['git', '-C', repo_root, 'rev-parse', '--short=12', 'HEAD'],
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=1,
+        ).strip()
+        return out or None
+    except Exception as e:
+        logger.debug(f"Git short SHA lookup failed: {e}")
+        return None
+
+
+def _runtime_version_info():
+    base_version = (
+        os.environ.get('MEDIADASH_VERSION')
+        or os.environ.get('APP_VERSION')
+        or _read_version_file()
+    ).strip()
+    if re.match(r'^v\d+\.\d+\.\d+', base_version):
+        base_version = base_version[1:]
+
+    image = (
+        os.environ.get('MEDIADASH_IMAGE')
+        or os.environ.get('IMAGE_NAME')
+        or ''
+    ).strip()
+    image_tag = (
+        os.environ.get('MEDIADASH_IMAGE_TAG')
+        or os.environ.get('IMAGE_TAG')
+        or ''
+    ).strip()
+    channel = (
+        os.environ.get('MEDIADASH_CHANNEL')
+        or os.environ.get('APP_CHANNEL')
+        or ''
+    ).strip().lower()
+
+    if not image_tag and ':' in image and not image.endswith(':'):
+        image_tag = image.rsplit(':', 1)[-1]
+
+    dev_markers = {'dev', 'local', 'development', 'snapshot', 'edge'}
+    is_dev = (
+        channel in dev_markers
+        or image_tag in dev_markers
+        or base_version in dev_markers
+        or base_version.endswith('-dev')
+        or base_version.endswith('-local')
+    )
+
+    commit = _git_short_sha()
+    display = f'v{base_version}' if base_version and base_version != 'unknown' else 'unknown'
+    if is_dev:
+        display = 'dev'
+        if commit:
+            display = f'dev-{commit[:7]}'
+
+    return {
+        'version': base_version,
+        'display': display,
+        'channel': channel or ('dev' if is_dev else 'release'),
+        'is_dev': is_dev,
+        'image': image or None,
+        'image_tag': image_tag or None,
+        'commit': commit,
+    }
+
+
+@app.route('/api/version')
+def version():
+    return jsonify(_runtime_version_info())
 
 
 _version_check_cache = {'result': None, 'ts': 0}
@@ -576,63 +630,169 @@ _VERSION_CHECK_TTL = 3600  # 1 hour
 
 def _parse_semver(v):
     """Return (major, minor, patch) tuple from a version string, ignoring leading 'v'."""
-    v = v.lstrip('v').split('-')[0]
+    v = str(v or '').lstrip('v').split('-')[0]
     parts = v.split('.')
     try:
-        return tuple(int(x) for x in parts[:3])
+        parsed = tuple(int(x) for x in parts[:3])
+        return parsed + (0,) * (3 - len(parsed))
     except ValueError:
         return (0, 0, 0)
 
 
+def _is_release_tag(tag):
+    return bool(re.match(r'^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$', str(tag or '')))
+
+
+def _latest_semver_tag(tags):
+    release_tags = [str(t).lstrip('v') for t in tags if _is_release_tag(t)]
+    if not release_tags:
+        return None
+    return sorted(release_tags, key=_parse_semver)[-1]
+
+
+def _parse_www_authenticate(header):
+    # Bearer realm="...",service="...",scope="..."
+    if not header or ' ' not in header:
+        return None, {}
+    scheme, rest = header.split(' ', 1)
+    parts = {}
+    for match in re.finditer(r'(\w+)="([^"]*)"', rest):
+        parts[match.group(1)] = match.group(2)
+    return scheme.lower(), parts
+
+
+def _fetch_ghcr_latest_tag(image):
+    image = (image or DEFAULT_GHCR_IMAGE).strip()
+    if image.startswith('ghcr.io/'):
+        image = image[len('ghcr.io/'):]
+    image = image.strip('/')
+    if '/' not in image:
+        raise ValueError('GHCR image must include owner and package')
+
+    import requests as _req
+
+    url = f'https://ghcr.io/v2/{image}/tags/list'
+    resp = _req.get(url, timeout=6)
+    if resp.status_code == 401:
+        scheme, params = _parse_www_authenticate(resp.headers.get('WWW-Authenticate', ''))
+        if scheme != 'bearer' or not params.get('realm'):
+            resp.raise_for_status()
+        query = {
+            'service': params.get('service') or 'ghcr.io',
+            'scope': params.get('scope') or f'repository:{image}:pull',
+        }
+        realm = params['realm']
+        token_resp = _req.get(realm + '?' + urlencode(query), timeout=6)
+        token_resp.raise_for_status()
+        token = token_resp.json().get('token')
+        resp = _req.get(url, headers={'Authorization': f'Bearer {token}'}, timeout=6)
+
+    resp.raise_for_status()
+    latest = _latest_semver_tag(resp.json().get('tags') or [])
+    if not latest:
+        raise ValueError('No semver GHCR tags found')
+    return latest
+
+
+def _fetch_github_latest_release(repo):
+    import requests as _req
+    resp = _req.get(
+        f'https://api.github.com/repos/{repo}/releases/latest',
+        headers={'Accept': 'application/vnd.github+json'},
+        timeout=6,
+    )
+    resp.raise_for_status()
+    latest_tag = resp.json().get('tag_name', '').lstrip('v')
+    if not latest_tag:
+        raise ValueError('No release tag found')
+    return latest_tag
+
+
 @app.route('/api/version/check')
 def version_check():
-    github_repo = os.environ.get('GITHUB_REPO', '').strip()
-    if not github_repo:
-        return jsonify({'status': 'unconfigured'})
-
     now = time.time()
     if _version_check_cache['result'] and now - _version_check_cache['ts'] < _VERSION_CHECK_TTL:
         return jsonify(_version_check_cache['result'])
 
-    try:
-        version_file = os.path.join(app.root_path, 'VERSION')
-        with open(version_file, 'r', encoding='utf-8') as f:
-            local_ver = f.read().strip()
-    except Exception:
-        return jsonify({'status': 'error'})
+    local = _runtime_version_info()
+    local_ver = local.get('version') or 'unknown'
+    ghcr_image = os.environ.get('GHCR_IMAGE', DEFAULT_GHCR_IMAGE).strip()
+    github_repo = os.environ.get('GITHUB_REPO', '').strip()
 
+    latest_tag = None
+    source = None
     try:
-        import requests as _req
-        resp = _req.get(
-            f'https://api.github.com/repos/{github_repo}/releases/latest',
-            headers={'Accept': 'application/vnd.github+json'},
-            timeout=5,
-        )
-        resp.raise_for_status()
-        latest_tag = resp.json().get('tag_name', '').lstrip('v')
-        if not latest_tag:
-            return jsonify({'status': 'error'})
-    except Exception:
-        return jsonify({'status': 'error'})
+        latest_tag = _fetch_ghcr_latest_tag(ghcr_image)
+        source = 'ghcr'
+    except Exception as ghcr_err:
+        logger.warning(f"GHCR version check failed for {ghcr_image}: {ghcr_err}")
+        if github_repo:
+            try:
+                latest_tag = _fetch_github_latest_release(github_repo)
+                source = 'github'
+            except Exception as github_err:
+                logger.warning(f"GitHub release check failed for {github_repo}: {github_err}")
+                latest_tag = None
+
+    if not latest_tag:
+        return jsonify({
+            'status': 'error',
+            'local': local_ver,
+            'runtime': local,
+            'message': 'Unable to check GHCR or GitHub releases',
+        })
 
     is_current = _parse_semver(local_ver) >= _parse_semver(latest_tag)
     result = {
         'status': 'current' if is_current else 'outdated',
         'local': local_ver,
         'latest': latest_tag,
+        'runtime': local,
+        'source': source,
+        'is_dev': local.get('is_dev', False),
     }
     _version_check_cache['result'] = result
     _version_check_cache['ts'] = now
     return jsonify(result)
 
 
-# ============================================================
+#=========
 # SETTINGS
-# ============================================================
-
+#=========
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
     return jsonify(get_user_settings())
+
+
+def _valid_column_setting_key(key):
+    return (
+        isinstance(key, str)
+        and 1 <= len(key) <= 256
+        and key.startswith('mediadash_')
+        and re.fullmatch(r'[A-Za-z0-9_.:%()\-]+', key) is not None
+    )
+
+
+@app.route('/api/column-settings', methods=['GET'])
+def get_column_settings():
+    key = request.args.get('key', '')
+    if not _valid_column_setting_key(key):
+        return jsonify({'error': 'Invalid column setting key'}), 400
+    return jsonify({'key': key, 'value': get_column_setting(key)})
+
+
+@app.route('/api/column-settings', methods=['POST'])
+def update_column_settings():
+    data = request.get_json(silent=True) or {}
+    key = data.get('key')
+    value = data.get('value')
+    if not _valid_column_setting_key(key):
+        return jsonify({'error': 'Invalid column setting key'}), 400
+    if not isinstance(value, dict):
+        return jsonify({'error': 'value must be an object'}), 400
+    if not save_column_setting(key, value):
+        return jsonify({'error': 'Failed to save column setting'}), 500
+    return jsonify({'status': 'ok'})
 
 
 @app.route('/api/settings', methods=['POST'])
@@ -642,7 +802,7 @@ def update_settings():
     plex_token = (data.get('plex_token') or '').strip()
     test_only = bool(data.get('test_only', False))
 
-    # NAMING RULE FIELDS (OPTIONAL — ONLY VALIDATED/SAVED WHEN PRESENT)
+    # Naming rule fields (optional — only validated/saved when present)
     episode_format = data.get('episode_format')
     season_dir_zero_pad = data.get('season_dir_zero_pad')
     year_tolerance = data.get('year_tolerance')
@@ -688,7 +848,8 @@ def update_settings():
         return jsonify({'error': f'Could not reach a Plex server at that address. Make sure the URL is correct and your Plex server is running.'}), 400
     except (_requests.exceptions.Timeout, TimeoutError):
         return jsonify({'error': f'The Plex server took too long to respond. Check that it is running and reachable, then try again.'}), 400
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Plex connection test failed for {plex_url}: {e}")
         return jsonify({'error': 'Could not connect to Plex. Check your server URL and token, then try again.'}), 400
 
     if test_only:
@@ -714,10 +875,9 @@ def update_settings():
     return jsonify({'status': 'ok', 'plex_name': plex_name, 'plex_version': plex_version})
 
 
-# ============================================================
+#=====================
 # FRONTEND ENTRY POINT
-# ============================================================
-
+#=====================
 @app.route('/setup')
 def setup():
     return render_template('setup.html')
@@ -730,9 +890,8 @@ def index():
     return render_template('index.html')
 
 
-# ============================================================
+#======================
 # ENTRYPOINT (DEV ONLY)
-# ============================================================
-
+#======================
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5010, debug=True)

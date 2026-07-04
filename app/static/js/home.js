@@ -1,16 +1,11 @@
-// ############################################
-// # HOME PAGE — MEDIA SUMMARY DASHBOARD     #
-// ############################################
-
-// ============================================================
-// HOME PAGE — MEDIA SUMMARY DASHBOARD
-// ============================================================
+// #######################################
+// # HOME PAGE — MEDIA SUMMARY DASHBOARD #
+// #######################################
 
 const HomeDash = (() => {
-    // --------------------------------------------------------
+    //======
     // STATE
-    // --------------------------------------------------------
-
+    //======
     let _summary = null;
     let _stats = null;
     let _statsLoading = false;
@@ -21,10 +16,9 @@ const HomeDash = (() => {
     let _libraryPollCount = 0;
     let _pullTimestampMs  = null;
 
-    // --------------------------------------------------------
+    //=====
     // INIT
-    // --------------------------------------------------------
-
+    //=====
     function init() {
         load();
         _setupRefreshAll();
@@ -40,11 +34,10 @@ const HomeDash = (() => {
         load();
     }
 
-    // --------------------------------------------------------
+    //======================
     // LOAD SUMMARY FROM API
-    // --------------------------------------------------------
-
-    // STORE SUMMARY + LABELS, RETURN WHETHER ANY LIBRARY IS STILL WAITING ON NAMING DATA
+    //======================
+    // Store summary + labels, return whether any library is still waiting on naming data
     function _applySummary(summary) {
         _summary = summary;
         if (summary.labels) _labels = summary.labels;
@@ -101,7 +94,9 @@ const HomeDash = (() => {
                     _render();
                     if (libraries.some(l => l.namingHealth === null)) _startNamingPoll();
                 }
-            } catch (_) {}
+            } catch (err) {
+                console.warn('Home library poll failed: /api/home/summary', err?.message || err);
+            }
         }, 3000);
     }
 
@@ -129,7 +124,7 @@ const HomeDash = (() => {
         }
     }
 
-    // PATCH ONE CARD IN-PLACE — FADES OUT REFRESHING OVERLAY BEFORE SWAPPING HTML
+    // Patch one card in-place — fades out refreshing overlay before swapping HTML
     function _patchLibraryCard(lib) {
         const grid = document.getElementById('libraryGrid');
         if (!grid) return;
@@ -163,7 +158,9 @@ const HomeDash = (() => {
                     _renderMoreStats(_stats);
                     _stopStatsPoll();
                 }
-            } catch (_) {}
+            } catch (err) {
+                console.warn('Home stats poll failed: /api/home/stats', err?.message || err);
+            }
         }, 3000);
     }
 
@@ -183,8 +180,8 @@ const HomeDash = (() => {
                 const anyNull = _applySummary(data.summary);
                 _render();
                 if (!anyNull) _stopNamingPoll();
-            } catch (_) {
-                // SILENT FAIL — KEEP POLLING
+            } catch (err) {
+                console.warn('Home naming poll failed: /api/home/summary', err?.message || err);
             }
         }, 3000);
     }
@@ -195,10 +192,9 @@ const HomeDash = (() => {
         _updateLoadingPill();
     }
 
-    // --------------------------------------------------------
+    //=======
     // RENDER
-    // --------------------------------------------------------
-
+    //=======
     function _render() {
         _renderTotals(_summary.totals);
         _renderLibraryCards(_summary.libraries);
@@ -233,7 +229,7 @@ const HomeDash = (() => {
         _loadStats();
     }
 
-    // FETCH SUMMARY (OR USE CACHED), STORE PULL TIMESTAMP, UPDATE DISPLAY
+    // Fetch summary (or use cached), store pull timestamp, update display
     async function updateSyncAge() {
         const el = document.getElementById('syncLastPulled');
         if (!el) return;
@@ -247,7 +243,7 @@ const HomeDash = (() => {
         } catch { el.textContent = ''; }
     }
 
-    // RECOMPUTE DISPLAY FROM STORED TIMESTAMP — NO NETWORK CALL (USE ON PAGE NAVIGATION)
+    // Recompute display from stored timestamp — no network call (use on page navigation)
     function refreshSyncDisplay() {
         const el = document.getElementById('syncLastPulled');
         if (!el || _pullTimestampMs == null) return;
@@ -255,7 +251,7 @@ const HomeDash = (() => {
         el.textContent = 'Last pulled: ' + relativeTime(ageSeconds);
     }
 
-    // RENDER TOP-LEVEL AGGREGATE STAT CARDS
+    //Render Top-level Aggregate STAT Cards
     function _renderTotals(t) {
         const el = document.getElementById('summaryTotals');
         const cards = [
@@ -274,7 +270,7 @@ const HomeDash = (() => {
         `).join('');
     }
 
-    // RENDER ONE CARD PER PLEX LIBRARY
+    //Render ONE CARD PER PLEX Library
     function _renderLibraryCards(libraries) {
         const el = document.getElementById('libraryGrid');
         el.innerHTML = libraries.map(lib =>
@@ -286,7 +282,7 @@ const HomeDash = (() => {
         const typeClass = lib.type === 'movie' ? 'library-type-movie' : 'library-type-show';
         const typeLabel = lib.type === 'movie' ? _labels.movie : _labels.show;
 
-        // BUILD STATS ROWS BASED ON LIBRARY TYPE
+        // Build stats rows based on library type
         let rows = '';
         if (lib.type === 'movie') {
             rows = [
@@ -304,7 +300,7 @@ const HomeDash = (() => {
             ].map(_statRowHTML).join('');
         }
 
-        // NAMING HEALTH SECTION (ONLY IF NAMING CACHE IS WARM)
+        // Naming health section (only if naming cache is warm)
         const healthHTML = _namingHealthHTML(lib.namingHealth);
 
         return `
@@ -353,14 +349,14 @@ const HomeDash = (() => {
         `;
     }
 
-    // MAP A 0-100 PERCENT TO THE NAMING-HEALTH COLOR CLASS
+    // Map a 0-100 percent to the naming-health color class
     function _healthClass(pct) {
         if (pct >= 95) return 'pct-good';
         if (pct >= 80) return 'pct-warn';
         return 'pct-bad';
     }
 
-    // NAMING HEALTH BAR — ONLY SHOWN WHEN NAMING CACHE IS POPULATED
+    // Naming health bar — only shown when naming cache is populated
     function _namingHealthHTML(health) {
         if (!health) {
             return `<div class="naming-health naming-health--loading"><div class="naming-health-spinner"></div><span class="naming-health-loading-label">Loading naming data…</span></div>`;
@@ -384,10 +380,9 @@ const HomeDash = (() => {
         `;
     }
 
-    // --------------------------------------------------------
-    // UI STATE HELPERS
-    // --------------------------------------------------------
-
+    //====================
+    // UI STATE MANAGEMENT
+    //====================
     function _showLoading() {
         document.getElementById('homeLoading').style.display = '';
         document.getElementById('homeContent').style.display = 'none';
@@ -417,16 +412,15 @@ const HomeDash = (() => {
         if (pill) pill.style.display = shouldShow ? '' : 'none';
     }
 
-    // FORMAT NUMBER WITH LOCALE THOUSANDS SEPARATOR
+    // Format number with locale thousands separator
     function _fmt(n) {
         if (n == null) return '—';
         return Number(n).toLocaleString();
     }
 
-    // --------------------------------------------------------
+    //===========
     // PUBLIC API
-    // --------------------------------------------------------
-
+    //===========
     async function _loadStats() {
         if (_stats !== null || _statsPollTimer || _statsLoading) return;
         _statsLoading = true;
@@ -440,7 +434,8 @@ const HomeDash = (() => {
             _stats = data.stats;
             _renderMoreStats(_stats);
             _stopStatsPoll();
-        } catch (_) {
+        } catch (err) {
+            console.warn('Home stats load failed: /api/home/stats', err?.message || err);
             _stats = false;
             if (typeof ProgressHub !== 'undefined') ProgressHub.setAuxBusy('stats', false);
             _updateLoadingPill();
@@ -474,7 +469,7 @@ const HomeDash = (() => {
         section.innerHTML = html;
         toggleBtn.after(section);
 
-        // DELEGATED CLICK LISTENER FOR CLICKABLE STAT BARS AND CHIPS
+        // Delegated click listener for clickable stat bars and chips
         if (clickHandlers.size > 0) {
             section.addEventListener('click', (ev) => {
                 const el = ev.target.closest('.stat-bar-row--clickable, .stat-chip--clickable, .subtitle-legend-without--link');
@@ -503,7 +498,7 @@ const HomeDash = (() => {
         });
     }
 
-    // FIND FIRST LIBRARY TITLE OF A GIVEN TYPE FROM THE HOME SUMMARY
+    // Find first library title of a given type from the home summary
     function _findLibraryTitle(type) {
         if (!_summary || !_summary.libraries) return null;
         const lib = _summary.libraries.find(l => l.type === type);
@@ -519,20 +514,20 @@ const HomeDash = (() => {
         const movieLib = _findLibraryTitle('movie');
         const showLib  = _findLibraryTitle('show');
 
-        // HELPER: WRAP A stats-group WITH data-group ATTRIBUTE FOR CLICK DELEGATION
+        // Helper: wrap a stats-group with data-group attribute for click delegation
         function _withGroup(html, groupKey) {
             return html.replace('<div class="stats-group"', `<div class="stats-group" data-group="${groupKey}"`);
         }
 
         if (stats.containers && Object.keys(stats.containers).length > 0) {
             const sorted = Object.entries(stats.containers).sort((a, b) => b[1] - a[1]).slice(0, 4);
-            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'container', filterValue: name.toLowerCase() }) : null;
+            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'container', filterValue: name }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Containers \u2014 Movies', e, fmt, cb), 'containers'));
             if (cb) clickHandlers.set('containers', cb);
         }
         if (stats.codecs && Object.keys(stats.codecs).length > 0) {
             const sorted = Object.entries(stats.codecs).sort((a, b) => b[1] - a[1]).slice(0, 4);
-            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'videoCodec', filterValue: name.toLowerCase() }) : null;
+            const cb = movieLib ? (name) => SizeDash.navigateWithFilter(movieLib, { filterType: 'picklist', filterKey: 'videoCodec', filterValue: name }) : null;
             parts.push(_withGroup(_barGroupHTML(sorted, 'Video Codecs \u2014 Movies', e, fmt, cb), 'codecs'));
             if (cb) clickHandlers.set('codecs', cb);
         }
@@ -652,7 +647,7 @@ const HomeDash = (() => {
         return { html: parts.join(''), clickHandlers };
     }
 
-    // ONCCLICKROW: IF PROVIDED, ROWS RENDER AS CLICKABLE WITH DATA-VALUE ATTRIBUTE
+    // Oncclickrow: if provided, rows render as clickable with data-value attribute
     function _barGroupHTML(entries, label, e, fmt, onClickRow) {
         const max = entries.length > 0 ? entries[0][1] : 1;
         const rows = entries.map(([name, count]) => {
@@ -665,7 +660,7 @@ const HomeDash = (() => {
         return `<div class="stats-group" ${onClickRow ? 'data-clickable="1"' : ''}><div class="stats-group-label">${e(label)}</div>${rows}</div>`;
     }
 
-    // WIRE THE GLOBAL REFRESH ALL BUTTON TO INVALIDATE ALL CACHES
+    // Wire the global refresh all button to invalidate all caches
     function _setupRefreshAll() {
         const btn = document.getElementById('refreshAllBtn');
         if (!btn) return;
@@ -683,22 +678,24 @@ const HomeDash = (() => {
             if (overlay) overlay.classList.add('sync-overlay--visible');
             try {
                 await api('/api/sync', { method: 'POST' });
-                // INVALIDATE JS-SIDE CACHES IN ALL PAGE MODULES
+                // Invalidate js-side caches in all page modules
                 for (const m of [
                     typeof SizeDash !== 'undefined' ? SizeDash : null,
                     typeof NamingDash !== 'undefined' ? NamingDash : null,
+                    typeof HealthDash !== 'undefined' ? HealthDash : null,
                 ]) {
                     if (m && m.invalidateCache) m.invalidateCache();
                 }
-                // RE-FETCH THE ACTIVE PAGE'S LIBRARY IF USER IS ON A NON-HOME PAGE
+                // Re-fetch the active page's library if user is on a non-home page
                 const currentPage = getHashPage();
                 const refreshMap = {
                     naming: typeof NamingDash !== 'undefined' ? NamingDash : null,
                     size:   typeof SizeDash   !== 'undefined' ? SizeDash   : null,
+                    health: typeof HealthDash !== 'undefined' ? HealthDash : null,
                 };
                 if (refreshMap[currentPage]?.refreshActive) await refreshMap[currentPage].refreshActive();
                 showToast('All caches cleared. Refreshing libraries…', 'info');
-                // OLD DATA STAYS VISIBLE — OVERLAY EACH CARD WHILE ITS WORKER RUNS
+                //OLD DATA Stays Visible — Overlay EACH CARD While ITS Worker RUNS
                 const grid = document.getElementById('libraryGrid');
                 if (grid) {
                     for (const card of grid.querySelectorAll('.library-card[data-library-title]')) {

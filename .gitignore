@@ -1,6 +1,7 @@
 # EDITOR & IDE
 .vscode/
 .idea/
+.claude/
 /Docs
 /cache
 CLAUDE.md
@@ -34,3 +35,4 @@ out/
 Thumbs.db
 docker-compose.dev.yml
 .superpowers/
+/docs/superpowers/

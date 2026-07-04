@@ -1,11 +1,15 @@
 ######################################################
 # CUSTOMIZABLE COLUMNS — TABLE COLUMN DEFINITIONS    #
 ######################################################
-#
+
 # Per-library-type column metadata for toggleable/sortable table views
 # (key, display label, default visibility, sortability, expand-only flag).
 # Pure data — no Flask, cache, or Plex I/O. Pages reference this so column
 # sets can be shared/extended without duplicating definitions.
+
+#===================
+# USER CONFIGURATION
+#===================
 
 COLUMN_DEFINITIONS = {
     'movie': [

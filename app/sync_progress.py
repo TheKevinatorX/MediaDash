@@ -1,6 +1,7 @@
 ######################################################
 # SYNC PROGRESS — BACKGROUND TASK QUEUE & TRACKING   #
 ######################################################
+
 #
 # Generic prioritized background-task engine: runs worker functions on a
 # pool of daemon threads, tracks their status/progress, and reports active
@@ -10,17 +11,18 @@
 
 import logging
 import queue
+import time
 from threading import Lock, Thread
 
-# ============================================================
-# PRIORITY LEVELS — lower number = processed first
+#=================================================
+# PRIORITY LEVELS — LOWER NUMBER = PROCESSED FIRST
+#=================================================
 # Only one task type remains now that sync is unified into a single pass
-# ============================================================
 
 PRIO_SYNC = 0   # the single unified Plex sync pass
 
 
-# PRIORITY-QUEUE BACKGROUND TASK RUNNER
+#Priority-queue Background TASK Runner
 # Tasks are dequeued in (priority, submission-order) sequence across NUM_WORKERS threads.
 # Workers are daemon threads — they die with the Flask process cleanly.
 class BackgroundEnrichment:
@@ -50,17 +52,19 @@ class BackgroundEnrichment:
         with self._lock:
             return self._tasks.get(key, {}).get('status', 'none')
 
-    def update_progress(self, key, current, total, step=''):
+    def update_progress(self, key, current, total, step='', **details):
         with self._lock:
             task = self._tasks.get(key)
             if task:
-                task['progress'] = {'current': current, 'total': total, 'step': step}
+                progress = {'current': current, 'total': total, 'step': step, 'updatedAt': time.time()}
+                progress.update(details)
+                task['progress'] = progress
 
     def get_progress(self, key):
         with self._lock:
             return self._tasks.get(key, {}).get('progress')
 
-    # SILENT TASKS RUN NORMALLY BUT ARE HIDDEN FROM /API/PROGRESS
+    # Silent tasks run normally but are hidden from /api/progress
     def start(self, key, worker_fn, args=(), priority=5, silent=False):
         with self._lock:
             if self._tasks.get(key, {}).get('status') in ('pending', 'running'):
@@ -95,14 +99,18 @@ class BackgroundEnrichment:
         except Exception as e:
             self._logger.error(f"Background task failed for '{key}': {e}")
             with self._lock:
-                self._tasks[key] = {'status': 'error'}
+                task = self._tasks.setdefault(key, {})
+                task['status'] = 'error'
+                task['error'] = getattr(e, 'user_message', str(e))
+                task['errorCode'] = getattr(e, 'code', 'task_error')
+                task['endedAt'] = time.time()
 
     def get_all_active(self):
         with self._lock:
             result = []
             for key, task in self._tasks.items():
                 status = task.get('status', 'none')
-                if status not in ('pending', 'running'):
+                if status not in ('pending', 'running', 'error'):
                     continue
                 if task.get('silent', False):
                     continue
@@ -118,6 +126,13 @@ class BackgroundEnrichment:
                     'current': progress.get('current', 0),
                     'total': progress.get('total', 0),
                     'step': progress.get('step', ''),
+                    'phase': progress.get('phase', ''),
+                    'detail': progress.get('detail', ''),
+                    'error': task.get('error') or progress.get('error', ''),
+                    'errorCode': task.get('errorCode') or progress.get('errorCode', ''),
+                    'endedAt': task.get('endedAt'),
+                    'heartbeat': progress.get('heartbeat', 0),
+                    'updatedAt': progress.get('updatedAt'),
                     'priority': task.get('priority', 5),
                 })
             result.sort(key=lambda t: t['priority'])

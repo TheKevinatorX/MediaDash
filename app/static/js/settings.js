@@ -2,17 +2,19 @@
 // # SETTINGS PAGE                #
 // ################################
 
-// ============================================================
-// SETTINGS PAGE
-// ============================================================
-
 const SettingsDash = (() => {
+    //======
+    // STATE
+    //======
     let _tokenHint = '';
     let _tokenVisible = false;
     let _tmdbKeyHint = '';
     let _tmdbKeyVisible = false;
     let _excludedShows = [];
 
+    //=====================
+    // DOM & STATUS HELPERS
+    //=====================
     function _el(id) { return document.getElementById(id); }
 
     const STATUS_ICONS = {
@@ -21,7 +23,7 @@ const SettingsDash = (() => {
         testing: '<div class="spinner spinner-sm"></div>',
     };
 
-    // RENDER A STATUS BANNER INTO ANY ELEMENT (BY ID)
+    // Render a status banner into any element (by id)
     function _renderStatus(elId, msg, type) {
         const el = _el(elId);
         if (!el) return;
@@ -46,6 +48,9 @@ const SettingsDash = (() => {
         if (saveBtn) saveBtn.disabled = loading;
     }
 
+    //==============
+    // LOAD SETTINGS
+    //==============
     function _loadSettings() {
         return fetch('/api/settings')
             .then(r => r.json())
@@ -106,6 +111,9 @@ const SettingsDash = (() => {
         _updateFormatPreviews();
     }
 
+    //====================
+    // EXCLUDED SHOWS TAGS
+    //====================
     function _renderExcludedTags() {
         const container = _el('excludedShowsTags');
         const emptyEl   = _el('excludedShowsEmpty');
@@ -148,6 +156,9 @@ const SettingsDash = (() => {
         _renderExcludedTags();
     }
 
+    //=======================
+    // NAMING FORMAT PREVIEWS
+    //=======================
     function _updateFormatPreviews() {
         const epFmtSxx = _el('epFmtSxxExx');
         const seasonPadOn = _el('seasonPadOn');
@@ -163,19 +174,28 @@ const SettingsDash = (() => {
         }
     }
 
+    //=============
+    // VERSION INFO
+    //=============
     function _loadVersion() {
         return fetch('/api/version')
             .then(r => r.json())
             .then(data => {
                 const versionEl = _el('settingsVersion');
-                if (versionEl && data.version) {
-                    versionEl.textContent = 'v' + data.version;
+                if (versionEl && (data.display || data.version)) {
+                    versionEl.textContent = data.display || ('v' + data.version);
+                    if (data.is_dev && data.version && data.version !== 'dev') {
+                        versionEl.title = 'Local development build based on v' + data.version;
+                    }
                 }
             })
             .catch(() => {});
     }
 
-    // POST JSON TO /api/settings AND RETURN { ok, data }
+    //============
+    // SAVE & TEST
+    //============
+    // POST JSON to /api/settings and return { ok, data }
     function _postSettings(body) {
         return fetch('/api/settings', {
             method: 'POST',
@@ -319,6 +339,9 @@ const SettingsDash = (() => {
             });
     }
 
+    //=======================
+    // KEY VISIBILITY TOGGLES
+    //=======================
     function _initKeyToggle(btnId, inputId, iconId, visibleRef, setVisible) {
         const btn   = _el(btnId);
         const input = _el(inputId);
@@ -348,6 +371,9 @@ const SettingsDash = (() => {
         );
     }
 
+    //=====
+    // INIT
+    //=====
     function init() {
         _hideStatus();
         _loadSettings();
@@ -370,7 +396,7 @@ const SettingsDash = (() => {
             if (el) el.addEventListener('input', _hideStatus);
         });
 
-        // LIVE-UPDATE FORMAT PREVIEWS WHEN NAMING RULE RADIOS CHANGE
+        // Live-update format previews when naming rule radios change
         ['epFmtNxEE', 'epFmtSxxExx', 'seasonPadOff', 'seasonPadOn'].forEach(id => {
             const el = _el(id);
             if (el) el.addEventListener('change', _updateFormatPreviews);

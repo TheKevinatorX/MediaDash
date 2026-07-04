@@ -8,14 +8,13 @@ import logging
 import unicodedata
 from pathlib import PurePosixPath
 from flask import Blueprint, jsonify
-from plexapi.exceptions import Unauthorized
 
 import shared as _shared
 
 from shared import (
-    cache, enrichment, get_plex, with_plex_retry,
+    cache, enrichment, get_plex,
     EXCLUDED_SHOWS,
-    _libraries_from_cache, _libraries_from_plex,
+    libraries_response,
 )
 
 SUPPORTED_LIBRARY_TYPES = ('movie', 'show')
@@ -24,10 +23,9 @@ naming_bp = Blueprint('naming', __name__)
 fetch_logger = logging.getLogger('mediadash.naming')
 api_logger = logging.getLogger('mediadash.naming.api')
 
-# ============================================================
-# NAME ANALYSIS (imported from name_analysis.py)
-# ============================================================
-
+#======================
+# NAME ANALYSIS IMPORTS
+#======================
 from name_analysis import (
     sanitize_title, format_episode_code,
     build_expected_movie_name, build_expected_movie_dir,
@@ -39,38 +37,17 @@ from name_analysis import (
 )
 
 
-# ============================================================
-# FETCH HELPERS
-# ============================================================
-
-# ============================================================
+#=================
 # BLUEPRINT ROUTES
-# ============================================================
-
-# LIST ALL SUPPORTED PLEX LIBRARIES FOR NAMING ANALYSIS
+#=================
+# List all supported Plex libraries for naming analysis
 @naming_bp.route('/libraries')
 def get_libraries():
-    libs = _libraries_from_cache(SUPPORTED_LIBRARY_TYPES)
-    if libs:
-        return jsonify({'libraries': libs, 'episodeFormat': _shared.EPISODE_FORMAT})
-
-    # COLD PATH: NO CACHE YET — CONNECT TO PLEX
-    try:
-        def _fetch(plex):
-            libraries = _libraries_from_plex(plex, SUPPORTED_LIBRARY_TYPES, logger=api_logger)
-            api_logger.info(f'Found {len(libraries)} supported libraries')
-            return jsonify({'libraries': libraries, 'episodeFormat': _shared.EPISODE_FORMAT})
-
-        return with_plex_retry(_fetch)
-
-    except Unauthorized:
-        return jsonify({'error': 'Authentication failed. Check your PLEX_TOKEN.'}), 401
-    except Exception as e:
-        api_logger.error(f'Failed to fetch libraries: {e}')
-        return jsonify({'error': f'Failed to connect to Plex: {e}'}), 500
+    return libraries_response(SUPPORTED_LIBRARY_TYPES, api_logger,
+                              extra={'episodeFormat': _shared.EPISODE_FORMAT})
 
 
-# FILTER OUT SPECIALS (SEASON 0) AND EXCLUDED SHOWS — APPLIED TO ANY SHOW ITEM LIST
+# Filter out specials (season 0) and excluded shows — applied to any show item list
 def _filter_show_items(items):
     items = [i for i in items if i.get('seasonNum', 0) != 0]
     if EXCLUDED_SHOWS:
@@ -98,7 +75,7 @@ def _naming_response(title, cache_key, cached):
     })
 
 
-# FETCH NAMING ANALYSIS FOR A LIBRARY
+# Fetch naming analysis for a library
 @naming_bp.route('/library/<path:title>')
 def get_library(title):
     cache_key = f'naming:{title}'
@@ -106,7 +83,7 @@ def get_library(title):
     if cached and cached.get('items'):
         return _naming_response(title, cache_key, cached)
 
-    # COLD — LEARN LIBRARY TYPE FROM SEARCH CACHE IF AVAILABLE, NO PLEX CONTACT
+    # Cold — learn library type from search cache if available, no PLEX contact
     search_entry = cache.get(f'search:{title}') or cache.get_stale(f'search:{title}')
     lib_type = search_entry.get('type', 'movie') if search_entry else None
     api_logger.info(f"{title}: naming cache cold — run Sync to populate")
@@ -117,7 +94,7 @@ def get_library(title):
     })
 
 
-# POLL FOR BACKGROUND ENRICHMENT STATUS
+# Poll for background enrichment status
 @naming_bp.route('/library/<path:title>/enrichment')
 def get_enrichment_status(title):
     cache_key = f'naming:{title}'
@@ -141,7 +118,7 @@ def get_enrichment_status(title):
     return jsonify(resp)
 
 
-# DEBUG ROUTE — RAW VS NORMALIZED NAMING FOR MISMATCH DIAGNOSIS
+# Debug route — raw vs normalized naming for mismatch diagnosis
 @naming_bp.route('/debug/library/<path:title>')
 def debug_library_naming(title):
     try:
@@ -178,7 +155,8 @@ def debug_library_naming(title):
                         })
                         if len(results) >= 20:
                             break
-                except Exception:
+                except Exception as e:
+                    fetch_logger.debug(f"Debug mismatch scan failed for movie in '{title}': {e}")
                     continue
 
         elif lib_type == 'show':
@@ -215,7 +193,8 @@ def debug_library_naming(title):
                         })
                         if len(results) >= 20:
                             break
-                except Exception:
+                except Exception as e:
+                    fetch_logger.debug(f"Debug mismatch scan failed for episode in '{title}': {e}")
                     continue
 
         return jsonify({'library': title, 'type': lib_type, 'mismatches': results})

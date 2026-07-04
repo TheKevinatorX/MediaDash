@@ -1,22 +1,25 @@
 ############################################
 # NAME ANALYSIS — NAMING CONVENTION RULES  #
 ############################################
+
 #
 # Pure naming-convention logic: building expected filenames/dirnames from
 # Plex metadata, checking actual names against those expectations, and
 # extracting per-item naming-status data. No Flask, cache, or Plex I/O here.
 
+import logging
 import re
 import unicodedata
 from pathlib import PurePosixPath
 
 import shared as _shared
 
-# ============================================================
-# TITLE / NAME BUILDERS
-# ============================================================
+logger = logging.getLogger('mediadash.name_analysis')
 
-# SANITIZE TITLE FOR FILESYSTEM: REMOVE ILLEGAL CHARS
+#======================
+# TITLE / NAME BUILDERS
+#======================
+# Sanitize title for filesystem: remove illegal chars
 def sanitize_title(title):
     if not title:
         return ''
@@ -27,7 +30,7 @@ def sanitize_title(title):
     return title
 
 
-# FORMAT EPISODE CODE BASED ON CONFIGURED FORMAT
+# Format episode code based on configured format
 def format_episode_code(season_num, episode_num):
     if _shared.EPISODE_FORMAT == 'SxxExx':
         return f'S{season_num:02d}E{episode_num:02d}'
@@ -35,7 +38,7 @@ def format_episode_code(season_num, episode_num):
         return f'{season_num}x{episode_num:02d}'
 
 
-# BUILD EXPECTED MOVIE FILENAME FROM METADATA
+# Build expected movie filename from metadata
 def build_expected_movie_name(title, year, ext):
     clean_title = sanitize_title(title)
     if year and not re.search(r'\(\d{4}\)', clean_title):
@@ -43,7 +46,7 @@ def build_expected_movie_name(title, year, ext):
     return f'{clean_title}{ext}'
 
 
-# BUILD EXPECTED MOVIE DIRECTORY NAME FROM METADATA
+# Build expected movie directory name from metadata
 def build_expected_movie_dir(title, year):
     clean_title = sanitize_title(title)
     if year and not re.search(r'\(\d{4}\)', clean_title):
@@ -51,7 +54,7 @@ def build_expected_movie_dir(title, year):
     return clean_title
 
 
-# BUILD EXPECTED EPISODE FILENAME FROM METADATA
+# Build expected episode filename from metadata
 def build_expected_episode_name(show_title, show_year, season_num, episode_num, episode_title, ext):
     clean_show = sanitize_title(show_title)
     clean_ep = sanitize_title(episode_title)
@@ -67,7 +70,7 @@ def build_expected_episode_name(show_title, show_year, season_num, episode_num, 
     return f'{base}{ext}'
 
 
-# BUILD EXPECTED SHOW DIRECTORY NAME
+# Build Expected SHOW Directory NAME
 def build_expected_show_dir(title, year):
     clean_title = sanitize_title(title)
     if year and not re.search(r'\(\d{4}\)', clean_title):
@@ -75,17 +78,16 @@ def build_expected_show_dir(title, year):
     return clean_title
 
 
-# BUILD EXPECTED SEASON DIRECTORY NAME
+# Build expected season directory name
 def build_expected_season_dir(season_num):
     if _shared.SEASON_DIR_ZERO_PAD:
         return f'Season {season_num:02d}'
     return f'Season {season_num}'
 
 
-# ============================================================
+#============
 # NAME CHECKS
-# ============================================================
-
+#============
 # PATTERN: EPISODE CODE (NxEE or SxxExx, case-insensitive)
 # \d{1,2}x\d{2,3} avoids matching video resolutions like 1920x1080 (3-4 digit sides)
 EPISODE_CODE_RE = re.compile(r'\b\d{1,2}x\d{2,3}\b|S\d{1,2}E\d{1,2}', re.IGNORECASE)
@@ -118,21 +120,21 @@ def has_correct_episode_code(filename, season_num, episode_num):
     return bool(nxee.search(filename) or sxxexx.search(filename))
 
 
-# EXTRACT FILE EXTENSION FROM PATH
+# Extract file extension from path
 def get_ext(file_path):
     if not file_path:
         return ''
     return PurePosixPath(file_path).suffix
 
 
-# PULL THE 4-DIGIT YEAR OUT OF A NAME LIKE "Title (2021)", OR FALL BACK TO DEFAULT
+# Pull the 4-digit year out of a name like "title (2021)", or fall back to default
 def _year_from_name(name, default=None):
     m = YEAR_IN_NAME_RE.search(name)
     return int(m.group(1)) if m else default
 
 
-# NORMALIZE FOR FILENAME COMPARISON: UNICODE FORM + CURLY QUOTES -> STRAIGHT,
-# ELLIPSIS -> THREE DOTS, STRIP EXCLAMATION MARKS (metadata often omits/adds them).
+# Normalize for filename comparison: unicode form + curly quotes -> straight,
+# ellipsis -> three dots, strip exclamation marks (metadata often omits/adds them).
 def _normalize_for_compare(s):
     if not s:
         return ""
@@ -147,7 +149,7 @@ def _normalize_for_compare(s):
     return s.lower()
 
 
-# EXTRACT THE STRUCTURAL PREFIX OF AN EPISODE FILENAME: “Show (Year) - SxxExx”
+# Extract the structural prefix of an episode filename: “Show (Year) - SxxExx”
 # Episode titles are excluded from comparison because Plex metadata titles often
 # differ from the titles embedded in existing filenames (translated names, alt titles,
 # custom labels, etc.). The show identity + episode code is sufficient for correctness.
@@ -158,11 +160,10 @@ def _episode_structural_prefix(filename):
         return _normalize_for_compare(stem)
     return _normalize_for_compare(stem[:m.end()])
 
-# ============================================================
+#================
 # DATA EXTRACTION
-# ============================================================
-
-# EXTRACT MOVIE NAMING DATA FROM PLEX MOVIE OBJECT
+#================
+# Extract movie naming data from PLEX movie object
 def extract_movie_naming(movie):
     media = movie.media[0] if movie.media else None
     part = media.parts[0] if media and media.parts else None
@@ -179,7 +180,7 @@ def extract_movie_naming(movie):
 
     overall_status = 'mismatch' if 'mismatch' in (filename_status, dir_status) else 'match'
 
-    # COLLECT SUBTITLE LANGUAGES FROM PART STREAMS (TYPE 3 = SUBTITLE, REQUIRES includeElements=Stream)
+    # Collect subtitle languages from part streams (type 3 = subtitle, requires includeelements=stream)
     subtitle_langs = []
     if part:
         try:
@@ -193,8 +194,8 @@ def extract_movie_naming(movie):
                     )
                     if lang not in subtitle_langs:
                         subtitle_langs.append(lang)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Subtitle stream read failed for '{movie.title}': {e}")
 
     return {
         'title': movie.title or 'Unknown',
@@ -211,7 +212,7 @@ def extract_movie_naming(movie):
     }
 
 
-# EXTRACT EPISODE NAMING DATA FROM PLEX EPISODE OBJECT
+# Extract episode naming data from PLEX episode object
 def extract_episode_naming(episode, show_year_map=None):
     media = episode.media[0] if episode.media else None
     part = media.parts[0] if media and media.parts else None

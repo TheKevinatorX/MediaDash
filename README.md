@@ -4,7 +4,7 @@
 
 # MediaDash
 
-**A clean Plex dashboard for searching, filtering, naming checks, and media size insight.**
+**A clean Plex dashboard for syncing, browsing, naming checks, media size insight, and file health scans.**
 
 ![GitHub repo size](https://img.shields.io/github/repo-size/TheKevinatorX/MediaDash?style=for-the-badge&logo=github&color=dc2626)
 ![GitHub last commit](https://img.shields.io/github/last-commit/TheKevinatorX/MediaDash?style=for-the-badge&logo=github&color=dc2626)
@@ -41,7 +41,7 @@ It is also mobile-friendly so you can view your media stats on-the-go.
 - Uses cached data when available so the UI stays fast
   - Optimal for large libraries
 
-### 🔎 Search View
+### 🔎 Browse + Sizes View
 
 - Browse Plex libraries in table form
 - Search by title, genre, year, and other metadata
@@ -55,11 +55,17 @@ It is also mobile-friendly so you can view your media stats on-the-go.
 - Includes a built-in naming convention reference
 - Useful for spotting messy file names before they become a bigger problem
 
-### 📦 Sizes View
+### 📦 Storage Insight
 
 - Reviews storage usage across libraries
 - Helps identify large movies, shows, seasons, and episodes
 - Useful when cleaning up space or understanding storage growth
+
+### 🩺 File Health Scanner
+
+- Scans mounted media files with `ffprobe`
+- Flags unreadable files, missing streams, zero-byte files, and zero-duration media
+- Resumes scans after restarts so long checks do not disappear halfway through
 
 ### ⚙️ Setup + Settings UI
 
@@ -116,6 +122,9 @@ services:
       TZ: America/New_York
     volumes:
       - ./cache:/data/cache
+      # Optional, but required for the Health page:
+      - /media/Movies:/media/Movies:ro
+      - /media/FullSeries:/media/FullSeries:ro
 ```
 
 ---

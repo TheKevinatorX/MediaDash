@@ -1,6 +1,7 @@
-################################################
+########################################################
 # CALCULATIONS — PURE SIZE, DURATION & RESOLUTION MATH #
-################################################
+########################################################
+
 #
 # Pure aggregation/projection math for the Sizes page: turning raw
 # per-episode totals into per-season and per-series size/duration/
@@ -11,11 +12,10 @@ import re
 
 from shared import format_bytes, format_duration_short
 
-# ============================================================
+#==================
 # RESOLUTION LABELS
-# ============================================================
-
-# MAP PLEX RESOLUTION STRINGS TO DISPLAY LABELS AND SORT WEIGHTS
+#==================
+# Map PLEX resolution strings to display labels and sort weights
 RESOLUTION_LABELS = {
     'sd':   ('SD',    0),
     '480':  ('480p',  1),
@@ -25,7 +25,7 @@ RESOLUTION_LABELS = {
 }
 
 
-# COMPUTE THE DOMINANT RESOLUTION FROM A {resolution_key: count} MAP
+# Compute the dominant resolution from a {resolution_key: count} map
 # Plurality wins; ties broken by higher resolution rank. Returns (label, rank).
 def _compute_dominant_resolution(resolution_counts):
     if not resolution_counts:
@@ -38,7 +38,7 @@ def _compute_dominant_resolution(resolution_counts):
     return label, rank
 
 
-# BUILD THE SORTED PER-SEASON SIZE PROJECTION FOR A SHOW FROM ACCUMULATED SEASON META
+# Build the sorted per-season size projection for a show from accumulated season meta
 # `seasons_meta` is a {season_name: {'size', 'count', 'duration', 'resolutions'}} map.
 def build_season_size_list(seasons_meta):
     season_list = []

@@ -1,11 +1,10 @@
-// ################################
-// # SPA — APP SHELL AND ROUTER   #
-// ################################
+// ##############################
+// # SPA — APP SHELL AND ROUTER #
+// ##############################
 
-// ============================================================
-// THEME TOGGLE — PERSIST PREFERENCE TO LOCALSTORAGE
-// ============================================================
-
+//=============
+// THEME TOGGLE
+//=============
 function initThemeToggle() {
     const btn = document.getElementById('themeToggle');
     if (!btn) return;
@@ -17,10 +16,9 @@ function initThemeToggle() {
     });
 }
 
-// ============================================================
+//=====================================
 // HAMBURGER MENU — MOBILE NAV DROPDOWN
-// ============================================================
-
+//=====================================
 function initHamburgerMenu() {
     const btn = document.getElementById('hamburgerBtn');
     const actions = document.getElementById('headerActions');
@@ -43,21 +41,21 @@ function initHamburgerMenu() {
         isOpen() ? closeMenu() : openMenu();
     });
 
-    // CLOSE ON CLICK/TAP OUTSIDE
+    // Close on click/tap outside
     document.addEventListener('click', (e) => {
         if (isOpen() && !actions.contains(e.target) && !btn.contains(e.target)) {
             closeMenu();
         }
     });
 
-    // CLOSE AFTER NAVIGATING VIA A LINK IN THE MENU
+    // Close after navigating via a link in the menu
     actions.addEventListener('click', (e) => {
         if (e.target.closest('a[href]')) {
             setTimeout(closeMenu, 120);
         }
     });
 
-    // SWIPE GESTURE: SWIPE LEFT FROM RIGHT EDGE = OPEN; SWIPE RIGHT = CLOSE
+    // Swipe gesture: swipe left from right edge = open; swipe right = close
     let txStart = 0, tyStart = 0;
     document.addEventListener('touchstart', (e) => {
         txStart = e.touches[0].clientX;
@@ -65,7 +63,7 @@ function initHamburgerMenu() {
     }, { passive: true });
 
     document.addEventListener('touchend', (e) => {
-        if (window.innerWidth > 640) return;
+        if (!isMobile()) return;
         const dx = e.changedTouches[0].clientX - txStart;
         const dy = e.changedTouches[0].clientY - tyStart;
         if (Math.abs(dy) > Math.abs(dx) * 1.2) return; // mostly vertical — ignore
@@ -75,17 +73,15 @@ function initHamburgerMenu() {
     }, { passive: true });
 }
 
-// ============================================================
+//==============
 // CACHE WARMING
-// ============================================================
-
+//==============
 // Cache warming is intentionally user-triggered only.
 // The Sync button calls /api/sync explicitly.
 
-// ============================================================
+//======================================
 // SPA ROUTER — HASH-BASED PAGE SWITCHER
-// ============================================================
-
+//======================================
 const PAGES = {
     home: {
         pageId: 'page-home',

@@ -1,8 +1,10 @@
-.git
-.gitignore
-Docs
-CLAUDE.md
-cache
+/.git
+/.gitignore
+/.claude
+/Docs
+/docs/superpowers
+/CLAUDE.md
+/cache
 __pycache__
 *.pyc
 .env

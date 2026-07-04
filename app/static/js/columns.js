@@ -1,9 +1,7 @@
 // ################################################
 // # COLUMN MANAGER — SHARED COLUMN STATE/PERSIST #
 // ################################################
-//
-// Factory producing a self-contained column-management unit: visibility,
-// mobile visibility, order, widths, custom labels, persistence, picker UI,
+
 // resize handles, and drag-reorder. Pages instantiate one per table/view
 // and supply page-specific bits via `config`.
 //
@@ -35,34 +33,20 @@ function createColumnManager(config) {
         mobileColumns: [],
         columnLabels: { desktop: {}, mobile: {} },
         columnWidths: {},
+        mobileColumnWidths: {},
         columnOrder: [],
     };
 
-    function lsGetJSON(key, fallback) {
-        try {
-            const raw = localStorage.getItem(key);
-            return raw === null ? fallback : JSON.parse(raw);
-        } catch {
-            return fallback;
-        }
-    }
+    const MOBILE_WIDTH_PRESETS = {
+        s: 48,
+        m: 68,
+        l: 96,
+        xl: 132,
+    };
 
-    function lsSetJSON(key, value) {
-        try {
-            localStorage.setItem(key, JSON.stringify(value));
-        } catch { /* localStorage unavailable or quota exceeded — preference simply won't persist */ }
-    }
-
-    function escapeHTML(s) {
-        const div = document.createElement('div');
-        div.textContent = s == null ? '' : String(s);
-        return div.innerHTML;
-    }
-
-    // --------------------------------------------------------
-    // PERSISTENCE
-    // --------------------------------------------------------
-
+    //=================================================================
+    // PERSISTENCE — USES LSGETJSON/LSSETJSON/ESCAPEHTML FROM SHARED.JS
+    //=================================================================
     function loadVisibleColumns(defaultKeysFn) {
         const saved = lsGetJSON(`${lsPrefix}cols_${viewKeyFn()}`, null);
         if (Array.isArray(saved) && saved.length > 0) {
@@ -87,6 +71,15 @@ function createColumnManager(config) {
 
     function saveColumnWidths() {
         lsSetJSON(`${lsPrefix}widths_${viewKeyFn()}`, state.columnWidths);
+    }
+
+    function loadMobileColumnWidths() {
+        const saved = lsGetJSON(`${lsPrefix}mobile_widths_${viewKeyFn()}`, null);
+        state.mobileColumnWidths = (saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : {};
+    }
+
+    function saveMobileColumnWidths() {
+        lsSetJSON(`${lsPrefix}mobile_widths_${viewKeyFn()}`, state.mobileColumnWidths);
     }
 
     function loadColumnOrder() {
@@ -130,18 +123,93 @@ function createColumnManager(config) {
         lsSetJSON(`${lsPrefix}labels_${viewKeyFn()}`, state.columnLabels);
     }
 
+    function remoteStateKey() {
+        return `${lsPrefix}state_${encodeURIComponent(viewKeyFn())}`;
+    }
+
+    function snapshotState() {
+        return {
+            visibleColumns: state.visibleColumns,
+            mobileColumns: state.mobileColumns,
+            columnLabels: state.columnLabels,
+            columnWidths: state.columnWidths,
+            mobileColumnWidths: state.mobileColumnWidths,
+            columnOrder: state.columnOrder,
+        };
+    }
+
+    function applyStateSnapshot(saved) {
+        if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return false;
+        if (Array.isArray(saved.visibleColumns)) state.visibleColumns = saved.visibleColumns;
+        if (Array.isArray(saved.mobileColumns)) state.mobileColumns = saved.mobileColumns;
+        if (saved.columnLabels && typeof saved.columnLabels === 'object' && !Array.isArray(saved.columnLabels)) {
+            state.columnLabels = {
+                desktop: saved.columnLabels.desktop || {},
+                mobile: saved.columnLabels.mobile || {},
+            };
+        }
+        if (saved.columnWidths && typeof saved.columnWidths === 'object' && !Array.isArray(saved.columnWidths)) {
+            state.columnWidths = saved.columnWidths;
+        }
+        if (saved.mobileColumnWidths && typeof saved.mobileColumnWidths === 'object' && !Array.isArray(saved.mobileColumnWidths)) {
+            state.mobileColumnWidths = saved.mobileColumnWidths;
+        }
+        if (Array.isArray(saved.columnOrder)) state.columnOrder = saved.columnOrder;
+        return true;
+    }
+
+    function saveLocalState() {
+        saveVisibleColumns();
+        saveColumnWidths();
+        saveMobileColumnWidths();
+        saveColumnOrder();
+        saveMobileColumns();
+        saveColumnLabels();
+    }
+
+    function hasCustomLabels() {
+        return Object.keys(state.columnLabels.desktop || {}).length > 0
+            || Object.keys(state.columnLabels.mobile || {}).length > 0;
+    }
+
+    async function loadRemoteState() {
+        try {
+            const data = await api(`/api/column-settings?key=${encodeURIComponent(remoteStateKey())}`);
+            if (applyStateSnapshot(data.value)) {
+                saveLocalState();
+                return true;
+            }
+            if (hasCustomLabels()) saveRemoteState();
+        } catch (err) {
+            console.warn('Column settings sync failed:', err?.message || err);
+        }
+        return false;
+    }
+
+    function saveRemoteState() {
+        try {
+            api('/api/column-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: remoteStateKey(), value: snapshotState() }),
+            }).catch(err => console.warn('Column settings save failed:', err?.message || err));
+        } catch (err) {
+            console.warn('Column settings save failed:', err?.message || err);
+        }
+    }
+
     function loadAll(defaultKeysFn) {
         loadVisibleColumns(defaultKeysFn);
         loadColumnWidths();
+        loadMobileColumnWidths();
         loadColumnOrder();
         loadMobileColumns();
         loadColumnLabels();
     }
 
-    // --------------------------------------------------------
+    //==================
     // ORDERING & LABELS
-    // --------------------------------------------------------
-
+    //==================
     function getColLabel(col, isMobile) {
         if (col.key === 'rank') return '#';
         if (isMobile) return state.columnLabels.mobile[col.key] || mobileLabels[col.key] || col.label;
@@ -174,19 +242,32 @@ function createColumnManager(config) {
         return [rankCol, ...ordered];
     }
 
-    // --------------------------------------------------------
+    //==========
     // PICKER UI
-    // --------------------------------------------------------
-
+    //==========
     function renderColumnPicker() {
         if (!pickerEnabled || !pickerElementId) return;
         const picker = document.getElementById(pickerElementId);
         if (!picker) return;
+        const previousList = picker.querySelector('.picker-list--studio');
+        const previousListScrollTop = previousList ? previousList.scrollTop : 0;
+        const previousPickerScrollTop = picker.scrollTop || 0;
         const tableCols = getMasterCols().filter(c => c.key !== 'rank' && !c.expandOnly);
         const hasLabels = Object.keys(state.columnLabels.desktop).length > 0 || Object.keys(state.columnLabels.mobile).length > 0;
 
-        let html = '<div class="picker-col-header"><span>Desktop</span><span>Mobile</span><span title="Desktop">D</span><span title="Mobile">M</span></div>';
-        html += '<div class="picker-list">';
+        let html = `<div class="picker-shell">
+            <div class="picker-hero">
+                <div>
+                    <div class="picker-eyebrow">Column Studio</div>
+                    <div class="picker-title">Choose, rename, and arrange columns</div>
+                </div>
+                <div class="picker-hero-count">${state.visibleColumns.length} desktop · ${state.mobileColumns.length} mobile</div>
+            </div>
+            <div class="picker-legend">
+                <span><span class="picker-dot picker-dot--desktop"></span>Desktop table</span>
+                <span><span class="picker-dot picker-dot--mobile"></span>Mobile table</span>
+            </div>
+            <div class="picker-list picker-list--studio">`;
         for (const col of tableCols) {
             const dChecked  = state.visibleColumns.includes(col.key) ? 'checked' : '';
             const mChecked  = state.mobileColumns.includes(col.key) ? 'checked' : '';
@@ -195,17 +276,51 @@ function createColumnManager(config) {
             const dCustom = state.columnLabels.desktop[col.key] || '';
             const mCustom = state.columnLabels.mobile[col.key] || '';
             const mPlaceholder = mobileLabels[col.key] || col.label;
-            html += `<div class="picker-item picker-item--grid">
-                <input type="text" class="picker-label-input" data-col="${col.key}" data-labeltype="desktop" value="${escapeHTML(dCustom)}" placeholder="${escapeHTML(col.label)}">
-                <input type="text" class="picker-label-input picker-label-input--mobile" data-col="${col.key}" data-labeltype="mobile" value="${escapeHTML(mCustom)}" placeholder="${escapeHTML(mPlaceholder)}">
-                <input type="checkbox" data-col="${col.key}" data-section="desktop" ${dChecked} ${dDisabled}>
-                <input type="checkbox" data-col="${col.key}" data-section="mobile" ${mChecked} ${mDisabled}>
+            const mobileWidth = state.mobileColumnWidths[col.key] || 'auto';
+            const widthDisabled = state.mobileColumns.includes(col.key) ? '' : 'disabled';
+            const widthBtn = (preset, label) =>
+                `<button type="button" class="picker-width-btn ${mobileWidth === preset ? 'active' : ''}" data-col="${col.key}" data-width="${preset}" ${widthDisabled}>${label}</button>`;
+            html += `<div class="picker-item picker-item--studio">
+                <div class="picker-col-main">
+                    <div class="picker-col-name">${escapeHTML(col.label)}</div>
+                    <div class="picker-col-key">${escapeHTML(col.key)}</div>
+                </div>
+                <label class="picker-switch picker-switch--desktop">
+                    <input type="checkbox" data-col="${col.key}" data-section="desktop" ${dChecked} ${dDisabled}>
+                    <span>Desktop</span>
+                </label>
+                <label class="picker-switch picker-switch--mobile">
+                    <input type="checkbox" data-col="${col.key}" data-section="mobile" ${mChecked} ${mDisabled}>
+                    <span>Mobile</span>
+                </label>
+                <div class="picker-labels">
+                    <label>Desktop name
+                        <span class="picker-label-edit">
+                            <input type="text" class="picker-label-input" data-col="${col.key}" data-labeltype="desktop" value="${escapeHTML(dCustom)}" placeholder="${escapeHTML(col.label)}">
+                        </span>
+                    </label>
+                    <label>Mobile name
+                        <span class="picker-label-edit">
+                            <input type="text" class="picker-label-input picker-label-input--mobile" data-col="${col.key}" data-labeltype="mobile" value="${escapeHTML(mCustom)}" placeholder="${escapeHTML(mPlaceholder)}">
+                        </span>
+                    </label>
+                </div>
+                <div class="picker-mobile-width">
+                    <span class="picker-width-label">Mobile width</span>
+                    <div class="picker-width-options">
+                        ${widthBtn('auto', 'Auto')}
+                        ${widthBtn('s', 'S')}
+                        ${widthBtn('m', 'M')}
+                        ${widthBtn('l', 'L')}
+                        ${widthBtn('xl', 'XL')}
+                    </div>
+                </div>
             </div>`;
         }
         html += '</div>';
         const orderedMob = state.mobileColumns.map(k => tableCols.find(c => c.key === k)).filter(Boolean);
         if (orderedMob.length > 0) {
-            html += '<div class="picker-mobile-order"><div class="picker-order-header">Mobile Column Order</div><div class="picker-order-list">';
+            html += '<div class="picker-mobile-order"><div class="picker-order-header">Mobile order</div><div class="picker-order-list">';
             orderedMob.forEach(c => {
                 const lbl = getColLabel(c, true);
                 html += `<div class="picker-order-item" draggable="true" data-col="${c.key}"><span class="picker-drag-handle">⠿</span><span>${escapeHTML(lbl)}</span></div>`;
@@ -224,8 +339,12 @@ function createColumnManager(config) {
         if (hasLabels) {
             html += '<div class="picker-footer-section"><button class="btn btn-sm" data-act="resetLabels" style="flex:1">Reset Label Names</button></div>';
         }
-        html += '</div>';
+        html += '</div></div>';
         picker.innerHTML = html;
+        picker.onclick = e => e.stopPropagation();
+        const nextList = picker.querySelector('.picker-list--studio');
+        if (nextList) nextList.scrollTop = previousListScrollTop;
+        picker.scrollTop = previousPickerScrollTop;
 
         const orderList = picker.querySelector('.picker-order-list');
         if (orderList) {
@@ -240,6 +359,7 @@ function createColumnManager(config) {
                     item.classList.remove('dragging');
                     state.mobileColumns = [...orderList.querySelectorAll('.picker-order-item')].map(i => i.dataset.col);
                     saveMobileColumns();
+                    saveRemoteState();
                     onChange();
                 });
                 item.addEventListener('dragover', e => {
@@ -252,20 +372,32 @@ function createColumnManager(config) {
             });
         }
 
-        let labelDebounce = null;
+        function commitLabels() {
+            picker.querySelectorAll('.picker-label-input').forEach(input => {
+                const colKey = input.dataset.col;
+                const labelType = input.dataset.labeltype;
+                const val = input.value.trim();
+                if (val) state.columnLabels[labelType][colKey] = val;
+                else delete state.columnLabels[labelType][colKey];
+            });
+            saveColumnLabels();
+            saveRemoteState();
+            onChange();
+        }
+
         picker.querySelectorAll('.picker-label-input').forEach(input => {
-            input.addEventListener('input', () => {
-                clearTimeout(labelDebounce);
-                labelDebounce = setTimeout(() => {
-                    const colKey = input.dataset.col;
-                    const labelType = input.dataset.labeltype;
-                    const val = input.value.trim();
-                    if (val) state.columnLabels[labelType][colKey] = val;
-                    else delete state.columnLabels[labelType][colKey];
-                    saveColumnLabels();
-                    onChange();
-                    renderColumnPicker();
-                }, 250);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    commitLabels();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    input.value = state.columnLabels[input.dataset.labeltype][input.dataset.col] || '';
+                    input.blur();
+                }
+            });
+            input.addEventListener('blur', () => {
+                commitLabels();
             });
         });
 
@@ -281,6 +413,7 @@ function createColumnManager(config) {
                 syncColumnOrder();
                 saveVisibleColumns();
                 saveColumnOrder();
+                saveRemoteState();
                 onChange();
             });
         });
@@ -294,7 +427,24 @@ function createColumnManager(config) {
                     state.mobileColumns = state.mobileColumns.filter(k => k !== colKey);
                 }
                 saveMobileColumns();
+                saveRemoteState();
                 onChange();
+            });
+        });
+
+        picker.querySelectorAll('.picker-width-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (btn.disabled) return;
+                const colKey = btn.dataset.col;
+                const preset = btn.dataset.width;
+                if (preset === 'auto') delete state.mobileColumnWidths[colKey];
+                else state.mobileColumnWidths[colKey] = preset;
+                saveMobileColumnWidths();
+                saveRemoteState();
+                onChange();
+                picker.querySelectorAll(`.picker-width-btn[data-col="${colKey}"]`).forEach(option => {
+                    option.classList.toggle('active', option.dataset.width === preset);
+                });
             });
         });
 
@@ -333,16 +483,16 @@ function createColumnManager(config) {
                 saveVisibleColumns();
                 saveColumnOrder();
                 saveMobileColumns();
+                saveRemoteState();
                 onChange();
                 renderColumnPicker();
             });
         });
     }
 
-    // --------------------------------------------------------
+    //==============
     // RESIZE & DRAG
-    // --------------------------------------------------------
-
+    //==============
     function initResizeHandles(thead, tableElementId, onResizingChange = () => {}) {
         thead.querySelectorAll('.resize-handle').forEach(handle => {
             handle.addEventListener('mousedown', (e) => {
@@ -370,6 +520,7 @@ function createColumnManager(config) {
                     document.body.style.cursor = '';
                     document.body.style.userSelect = '';
                     saveColumnWidths();
+                    saveRemoteState();
                     setTimeout(() => onResizingChange(false), 0);
                 }
                 document.body.style.cursor = 'col-resize';
@@ -444,6 +595,7 @@ function createColumnManager(config) {
 
                 state.columnOrder = keys;
                 saveColumnOrder();
+                saveRemoteState();
                 onChange();
 
                 setTimeout(() => {
@@ -457,15 +609,102 @@ function createColumnManager(config) {
         });
     }
 
+    //=============
+    // TABLE HEADER
+    //=============
+    //
+    // Renders the <thead> row for a data table and wires up sorting,
+    // column resizing, and drag-reorder. Pages keep their own sort state
+    // and re-render on `onSort(colKey)`.
+    //
+    // opts:
+    //   thead            : <thead> element to render into
+    //   tableElementId   : DOM id of the parent <table>
+    //   cols             : ordered column defs to render (incl. synthetic 'rank')
+    //   mobile           : boolean — use mobile labels
+    //   sortKey, sortDir : current sort state ('asc' | 'desc')
+    //   leadingHTML      : extra cell(s) before the first column, e.g. the expand-arrow column
+    //   thContentPrefix  : (col, label) => string — extra HTML inside th-content before the label
+    //   minWidthFallback : once any column has an explicit width, give the rest a min-width
+    //   sortMode         : 'sortable' — only cols with sortable:true clickable, get .sortable class
+    //                      'all'      — every column clickable, no .sortable class
+    //   onSort           : (colKey) => void — clicked a header; page updates sort state + re-renders
+    //   onResizingChange : (bool) => void — resize drag started/ended
+    //   isResizingFn     : () => bool — guard so ending a resize drag doesn't register as a sort click
+
+    function renderTableHeader(opts) {
+        const {
+            thead,
+            tableElementId,
+            cols,
+            mobile = false,
+            sortKey = null,
+            sortDir = 'asc',
+            leadingHTML = '',
+            thContentPrefix = () => '',
+            minWidthFallback = true,
+            sortMode = 'sortable',
+            onSort = () => {},
+            onResizingChange = () => {},
+            isResizingFn = () => false,
+        } = opts;
+        if (!thead) return;
+
+        const hasAnyWidth = Object.keys(state.columnWidths).length > 0;
+        const hasAnyMobileWidth = Object.keys(state.mobileColumnWidths).length > 0;
+        const table = document.getElementById(tableElementId);
+        table?.classList.toggle('resizable', mobile ? hasAnyMobileWidth : hasAnyWidth);
+
+        let headerHTML = '<tr>' + leadingHTML;
+        for (const col of cols) {
+            const isSorted = sortKey === col.key;
+            const sortClass = isSorted ? `sorted-${sortDir}` : '';
+            const sortableClass = (sortMode === 'sortable' && col.sortable) ? 'sortable' : '';
+            const rankClass = col.key === 'rank' ? 'row-num-col' : '';
+            const label = getColLabel(col, mobile);
+            const mobilePreset = state.mobileColumnWidths[col.key];
+            const mobileWidth = mobilePreset ? MOBILE_WIDTH_PRESETS[mobilePreset] : null;
+            const widthStyle = mobile && mobileWidth
+                ? `width:${mobileWidth}px;min-width:${mobileWidth}px;max-width:${mobileWidth}px;`
+                : state.columnWidths[col.key]
+                ? `width:${state.columnWidths[col.key]}px;`
+                : (minWidthFallback && hasAnyWidth) ? `min-width:${label.length + 3}ch;` : '';
+            const titleAttr = col.title ? ` title="${escapeHTML(col.title)}"` : '';
+
+            headerHTML += `<th class="${sortableClass} ${sortClass} ${rankClass}" data-col="${col.key}" draggable="true" style="${widthStyle}"${titleAttr}>`;
+            headerHTML += '<div class="th-content">';
+            headerHTML += thContentPrefix(col, label);
+            headerHTML += `<span class="th-label">${escapeHTML(label)}</span>`;
+            if (col.sortable) headerHTML += '<span class="sort-indicator"></span>';
+            headerHTML += '</div>';
+            headerHTML += `<div class="resize-handle" data-col="${col.key}"></div>`;
+            headerHTML += '</th>';
+        }
+        headerHTML += '</tr>';
+        thead.innerHTML = headerHTML;
+
+        initResizeHandles(thead, tableElementId, onResizingChange);
+        initColumnDrag(thead);
+
+        const selector = sortMode === 'all' ? 'th[data-col]' : 'th.sortable';
+        thead.querySelectorAll(selector).forEach(th => {
+            th.addEventListener('click', (e) => {
+                if (isResizingFn() || e.target.closest('.resize-handle') || e.target.closest('.col-filter-btn')) return;
+                onSort(th.dataset.col);
+            });
+        });
+    }
+
     return {
         state,
-        lsGetJSON, lsSetJSON, escapeHTML,
+        renderTableHeader,
         loadVisibleColumns, saveVisibleColumns,
         loadColumnWidths, saveColumnWidths,
+        loadMobileColumnWidths, saveMobileColumnWidths,
         loadColumnOrder, saveColumnOrder,
         loadMobileColumns, saveMobileColumns,
         loadColumnLabels, saveColumnLabels,
-        loadAll,
+        loadAll, loadRemoteState, saveRemoteState,
         mobileLabels,
         getColLabel, syncColumnOrder, getOrderedVisibleCols,
         renderColumnPicker, initResizeHandles, initColumnDrag,

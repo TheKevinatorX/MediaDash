@@ -6,24 +6,18 @@ import logging
 import time
 
 from flask import Blueprint, jsonify, request
-from plexapi.exceptions import Unauthorized
 
+from calculations import SIZE_SORT_KEY
 from search import fetch_episodes_for_season
 from shared import (
-    cache, enrichment, with_plex_retry,
-    sort_key_fn, _libraries_from_cache, _libraries_from_plex,
+    cache, enrichment,
+    sort_key_fn, plex_api_call, libraries_response,
 )
 
 SUPPORTED_LIBRARY_TYPES = ('movie', 'show')
 
 size_bp = Blueprint('size', __name__)
 api_logger = logging.getLogger('mediadash.size')
-
-# ============================================================
-# SIZE SORT KEYS (imported from calculations.py)
-# ============================================================
-
-from calculations import SIZE_SORT_KEY
 
 
 def _annotate_for_size_view(item, rank, library_type):
@@ -34,11 +28,9 @@ def _annotate_for_size_view(item, rank, library_type):
     annotated['mediaType'] = library_type
     return annotated
 
-# ============================================================
-# HELPERS
-# ============================================================
-
-
+#====================
+# SEARCH CACHE ACCESS
+#====================
 def _get_search_items(title, library_type):
     cache_key = f'search:{title}'
     cached = cache.get(cache_key) or cache.get_stale(cache_key)
@@ -55,28 +47,12 @@ def _get_search_items(title, library_type):
     return [], False, 0, False
 
 
-# ============================================================
+#=======
 # ROUTES
-# ============================================================
-
+#=======
 @size_bp.route('/libraries')
 def get_libraries():
-    libs = _libraries_from_cache(SUPPORTED_LIBRARY_TYPES)
-    if libs:
-        return jsonify({'libraries': libs})
-
-    # COLD PATH: NO CACHE YET — CONNECT TO PLEX
-    try:
-        def _fetch(plex):
-            return jsonify({'libraries': _libraries_from_plex(plex, SUPPORTED_LIBRARY_TYPES)})
-
-        return with_plex_retry(_fetch)
-
-    except Unauthorized:
-        return jsonify({'error': 'Authentication failed. Check your PLEX_TOKEN.'}), 401
-    except Exception as e:
-        api_logger.error(f'Failed to fetch libraries: {e}')
-        return jsonify({'error': f'Failed to connect to Plex: {e}'}), 500
+    return libraries_response(SUPPORTED_LIBRARY_TYPES, api_logger)
 
 
 def _library_response(title, library_type):
@@ -149,7 +125,7 @@ def _library_response(title, library_type):
 
 @size_bp.route('/library/<path:title>')
 def get_library(title):
-    # GET LIBRARY TYPE FROM CACHE AND RESPOND WITHOUT TOUCHING PLEX
+    # GET library type from cache and respond without touching PLEX
     search_entry = cache.get(f'search:{title}') or cache.get_stale(f'search:{title}')
     if search_entry:
         return _library_response(title, search_entry.get('type', 'movie'))
@@ -169,21 +145,17 @@ def get_episodes(title):
     if not show_title or not season_name:
         return jsonify({'error': 'show and season query parameters are required'}), 400
 
-    try:
-        def _fetch(plex):
-            section = plex.library.section(title)
-            matches = section.search(title=show_title, libtype='show')
-            if not matches:
-                return jsonify({'error': f"Show '{show_title}' not found in '{title}'"}), 404
-            episodes = fetch_episodes_for_season(matches[0], season_name)
-            return jsonify({'show': show_title, 'season': season_name, 'episodes': episodes})
+    def _fetch(plex):
+        section = plex.library.section(title)
+        matches = section.search(title=show_title, libtype='show')
+        if not matches:
+            return jsonify({'error': f"Show '{show_title}' not found in '{title}'"}), 404
+        episodes = fetch_episodes_for_season(matches[0], season_name)
+        return jsonify({'show': show_title, 'season': season_name, 'episodes': episodes})
 
-        return with_plex_retry(_fetch)
-    except Unauthorized:
-        return jsonify({'error': 'Authentication failed. Check your PLEX_TOKEN.'}), 401
-    except Exception as e:
-        api_logger.error(f"Failed to fetch episodes for '{show_title}' / '{season_name}': {e}")
-        return jsonify({'error': f'Failed to fetch episodes: {e}'}), 500
+    return plex_api_call(_fetch, api_logger,
+                         f"Failed to fetch episodes for '{show_title}' / '{season_name}'",
+                         'Failed to fetch episodes')
 
 
 @size_bp.route('/library/<path:title>/enrichment')

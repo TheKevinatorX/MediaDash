@@ -1,17 +1,12 @@
-// ####################################################
-// # NAMING PAGE — PLEX NAMING CONVENTION CHECKER   #
-// ####################################################
-
-// ============================================================
-// NAMING PAGE — PLEX NAMING CONVENTION CHECKER (IIFE MODULE)
-// ============================================================
+// ################################################
+// # NAMING PAGE — PLEX NAMING CONVENTION CHECKER #
+// ################################################
 
 const NamingDash = (() => {
 
-    // --------------------------------------------------------
+    //======
     // STATE
-    // --------------------------------------------------------
-
+    //======
     const state = {
         libraries: [],
         activeLibrary: null,
@@ -41,8 +36,8 @@ const NamingDash = (() => {
     const LS_PREFIX = 'mediadash_naming_';
     const SS_CACHE_PREFIX = 'mediadash_naming_cache_';
 
-    // PERSIST AN ENRICHED LIBRARY ENTRY TO sessionStorage SO MOBILE TAB
-    // RELOADS (BROWSER MEMORY RECLAIM) DON'T FORCE A FULL RE-FETCH/RE-DOWNLOAD
+    // Persist an enriched library entry to sessionstorage so mobile tab
+    // reloads (browser memory reclaim) don't force a full re-fetch/re-download
     function _persistCacheEntry(title, entry) {
         if (!entry || !entry.enriched) return;
         try {
@@ -55,7 +50,7 @@ const NamingDash = (() => {
         try { sessionStorage.removeItem(SS_CACHE_PREFIX + title); } catch { /* IGNORE */ }
     }
 
-    // REHYDRATE dataCache FROM sessionStorage ON LOAD (BEFORE ANY NETWORK FETCH)
+    // Rehydrate datacache from sessionstorage on load (before any network fetch)
     function _hydrateCacheFromSession() {
         let key;
         try {
@@ -69,7 +64,7 @@ const NamingDash = (() => {
         } catch { /* CORRUPT/UNAVAILABLE STORAGE — IGNORE */ }
     }
 
-    // MAP SUB-FILTER NAME TO ITEM PROPERTY KEY
+    // Map sub-filter name to item property key
     const MISMATCH_SUB_FILTER_KEY = {
         file: 'filenameStatus',
         season: 'seasonDirStatus',
@@ -77,10 +72,9 @@ const NamingDash = (() => {
         dir: 'dirStatus',
     };
 
-    // --------------------------------------------------------
+    //==================
     // STATS COMPUTATION
-    // --------------------------------------------------------
-
+    //==================
     function _computeStats(items, libraryType) {
         const total = items.length;
         const matches = items.filter(i => i.overallStatus === 'match').length;
@@ -95,10 +89,9 @@ const NamingDash = (() => {
         return { total, matches, mismatches, breakdown };
     }
 
-    // --------------------------------------------------------
+    //=====
     // INIT
-    // --------------------------------------------------------
-
+    //=====
     async function init() {
         _hydrateCacheFromSession();
         _showLoading(true, 'Connecting to Plex...');
@@ -125,10 +118,9 @@ const NamingDash = (() => {
         init();
     }
 
-    // --------------------------------------------------------
+    //================
     // EVENT LISTENERS
-    // --------------------------------------------------------
-
+    //================
     function _setupEventListeners() {
         let searchTimeout = null;
         const searchInput = document.getElementById('namingSearch');
@@ -229,10 +221,9 @@ const NamingDash = (() => {
         _applyView();
     }
 
-    // --------------------------------------------------------
+    //==================
     // LIBRARY SWITCHING
-    // --------------------------------------------------------
-
+    //==================
     async function _switchLibrary(title, type) {
         _stopEnrichmentPolling();
         _showEnrichmentBanner(false);
@@ -251,6 +242,7 @@ const NamingDash = (() => {
         state.statusFilter = 'issues';
         state.mismatchSubFilter = null;
         colMgr.loadColumnWidths();
+        colMgr.loadMobileColumnWidths();
 
         document.getElementById('namingSearch').value = '';
         document.getElementById('namingSearchClear').style.display = 'none';
@@ -261,6 +253,7 @@ const NamingDash = (() => {
         colMgr.loadMobileColumns();
         colMgr.loadColumnLabels();
         colMgr.loadColumnOrder();
+        await colMgr.loadRemoteState();
         state.columnPickerOpen = false;
         document.getElementById('namingColumnPicker').style.display = 'none';
 
@@ -320,10 +313,9 @@ const NamingDash = (() => {
         }, 5000);
     }
 
-    // --------------------------------------------------------
+    //==============
     // TAB RENDERING
-    // --------------------------------------------------------
-
+    //==============
     function _tabOrder(title) {
         const t = title.toLowerCase();
         if (t.includes('movie'))  return 0;
@@ -346,12 +338,9 @@ const NamingDash = (() => {
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'tab-refresh-btn';
             refreshBtn.type = 'button';
-            refreshBtn.title = `Quick refresh "${lib.title}" from Plex`;
-            refreshBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"/>
-                <polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>`;
+            refreshBtn.title = `Resync ${_libraryScopeLabel(lib.title, lib.type)} from Plex and recheck naming`;
+            refreshBtn.setAttribute('aria-label', refreshBtn.title);
+            refreshBtn.innerHTML = SVG_REFRESH;
             refreshBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 _quickRefreshLibrary(lib.title, lib.type, refreshBtn);
@@ -361,21 +350,30 @@ const NamingDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
-    // PER-LIBRARY QUICK REFRESH — RE-WALKS ONE LIBRARY ONLY
-    // --------------------------------------------------------
+    function _libraryScopeLabel(title, type) {
+        const t = String(title || '').toLowerCase();
+        if (type === 'movie' || t.includes('movie')) return 'Movies';
+        if (t.includes('anime')) return 'Animes';
+        return 'Shows';
+    }
 
+    //======================================================
+    // PER-LIBRARY QUICK REFRESH — RE-WALKS ONE LIBRARY ONLY
+    //======================================================
     async function _quickRefreshLibrary(title, type, btnEl) {
         if (btnEl.disabled) return;
         btnEl.disabled = true;
         btnEl.classList.add('spinning');
+        const label = _libraryScopeLabel(title, type);
         try {
+            showToast(`Resyncing ${label} from Plex and rechecking names…`, 'info');
             const result = await api(`/api/sync/library/${encodeURIComponent(title)}`, { method: 'POST' });
             if (result.status === 'error') throw new Error(result.message || 'Failed to start refresh');
             _pollQuickRefresh(title, type, btnEl, result.key || `refresh:${title}`);
         } catch (e) {
             btnEl.disabled = false;
             btnEl.classList.remove('spinning');
+            showToast(`${label} naming resync failed: ${e.message || e}`, 'error');
             console.error('Quick refresh failed:', e);
         }
     }
@@ -394,6 +392,7 @@ const NamingDash = (() => {
                         await _fetchLibrary(title, type);
                         _applyView();
                     }
+                    showToast(`${_libraryScopeLabel(title, type)} naming updated`, 'success');
                 }
             } catch { /* IGNORE TRANSIENT ERRORS — KEEP POLLING */ }
         }, 3000);
@@ -404,10 +403,9 @@ const NamingDash = (() => {
             tab.classList.toggle('active', tab.dataset.title === state.activeLibrary);
         });
     }
-    // --------------------------------------------------------
+    //==============
     // DATA FETCHING
-    // --------------------------------------------------------
-
+    //==============
     async function _fetchLibrary(title, type) {
         if (dataCache[title] && dataCache[title].enriched) return;
 
@@ -442,10 +440,9 @@ const NamingDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //===================
     // ENRICHMENT POLLING
-    // --------------------------------------------------------
-
+    //===================
     function _startEnrichmentPolling(title) {
         _stopEnrichmentPolling();
         _showEnrichmentBanner(true);
@@ -528,10 +525,9 @@ const NamingDash = (() => {
             : 'Analyzing all episodes in the background\u2026';
     }
 
-    // --------------------------------------------------------
+    //=====
     // VIEW
-    // --------------------------------------------------------
-
+    //=====
     function _applyView() {
         _showLoading(false);
         _hideError();
@@ -540,14 +536,14 @@ const NamingDash = (() => {
 
         let data = [...state.allItems];
 
-        // APPLY STATUS FILTER
+        //Apply Status Filter
         if (state.statusFilter === 'issues') {
             data = data.filter(i => i.overallStatus === 'mismatch');
         } else if (state.statusFilter === 'ok') {
             data = data.filter(i => i.overallStatus === 'match');
         }
 
-        // SUB-FILTER ONLY ACTIVE WHEN VIEWING ISSUES
+        // Sub-filter only active when viewing issues
         if (state.statusFilter !== 'ok' && state.mismatchSubFilter) {
             const key = MISMATCH_SUB_FILTER_KEY[state.mismatchSubFilter];
             if (key) data = data.filter(i => i[key] === 'mismatch');
@@ -613,10 +609,9 @@ const NamingDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //==========
     // STATS BAR
-    // --------------------------------------------------------
-
+    //==========
     function _renderStatsBar() {
         const bar = document.getElementById('namingStatsBar');
         const s = state.stats;
@@ -668,10 +663,9 @@ const NamingDash = (() => {
         });
     }
 
-    // --------------------------------------------------------
+    //================
     // TABLE RENDERING
-    // --------------------------------------------------------
-
+    //================
     const SHOW_COLUMNS = [
         { key: 'rank',            label: '#',                mobileLabel: '#',       sortable: false },
         { key: 'overallStatus',   label: 'Status',           mobileLabel: 'Stat',    sortable: true  },
@@ -695,12 +689,9 @@ const NamingDash = (() => {
         { key: 'dirStatus',      label: 'Dir',              mobileLabel: 'Dir',  sortable: true  },
     ];
 
-    function _isMobile() { return window.innerWidth <= 640; }
-
-    // --------------------------------------------------------
+    //===================
     // COLUMN PREFERENCES
-    // --------------------------------------------------------
-
+    //===================
     function _getActiveMasterCols() {
         return state.activeLibraryType === 'show' ? SHOW_COLUMNS : MOVIE_COLUMNS;
     }
@@ -733,9 +724,8 @@ const NamingDash = (() => {
     function _renderTable() {
         const thead = document.getElementById('namingTableHead');
         const tbody = document.getElementById('namingTableBody');
-        const table = document.getElementById('namingTable');
 
-        const mobile = _isMobile();
+        const mobile = isMobile();
         const cols = mobile
             ? (() => {
                 const master = _getActiveMasterCols();
@@ -744,29 +734,18 @@ const NamingDash = (() => {
                 return rank ? [rank, ...rest] : rest;
             })()
             : colMgr.getOrderedVisibleCols();
-        table.classList.toggle('resizable', Object.keys(colMgr.state.columnWidths).length > 0);
 
-        let headerHTML = '<tr><th class="expand-col"></th>';
-        for (const col of cols) {
-            const isSorted = state.sortBy === col.key;
-            const sortClass = isSorted ? `sorted-${state.sortDir}` : '';
-            const widthStyle = colMgr.state.columnWidths[col.key] ? `width:${colMgr.state.columnWidths[col.key]}px;` : '';
-            const rankClass = col.key === 'rank' ? 'row-num-col' : '';
-            headerHTML += `<th class="${sortClass} ${rankClass}" data-col="${col.key}" draggable="true" style="${widthStyle}">`;
-            headerHTML += '<div class="th-content">';
-            headerHTML += `<span class="th-label">${escapeHTML(colMgr.getColLabel(col, mobile))}</span>`;
-            if (col.sortable) headerHTML += '<span class="sort-indicator"></span>';
-            headerHTML += '</div>';
-            headerHTML += `<div class="resize-handle" data-col="${col.key}"></div>`;
-            headerHTML += '</th>';
-        }
-        headerHTML += '</tr>';
-        thead.innerHTML = headerHTML;
-
-        thead.querySelectorAll('th[data-col]').forEach(th => {
-            th.addEventListener('click', (e) => {
-                if (isResizing || e.target.closest('.resize-handle')) return;
-                const col = th.dataset.col;
+        colMgr.renderTableHeader({
+            thead,
+            tableElementId: 'namingTable',
+            cols,
+            mobile,
+            sortKey: state.sortBy,
+            sortDir: state.sortDir,
+            leadingHTML: '<th class="expand-col"></th>',
+            minWidthFallback: false,
+            sortMode: 'all',
+            onSort: (col) => {
                 if (state.sortBy === col) {
                     state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
                 } else {
@@ -774,11 +753,10 @@ const NamingDash = (() => {
                 }
                 state.page = 1; state.expandedRow = null;
                 _applyView();
-            });
+            },
+            onResizingChange: (resizing) => { isResizing = resizing; },
+            isResizingFn: () => isResizing,
         });
-
-        colMgr.initResizeHandles(thead, 'namingTable', (resizing) => { isResizing = resizing; });
-        colMgr.initColumnDrag(thead);
 
         let bodyHTML = '';
         for (let i = 0; i < state.items.length; i++) {
@@ -814,8 +792,7 @@ const NamingDash = (() => {
         });
     }
 
-    // CELL FORMATTING
-    // --------------------------------------------------------
+    //CELL Formatting
 
     function _formatCell(key, value, item) {
         if (value === null || value === undefined) return '<span class="text-muted">-</span>';
@@ -825,15 +802,13 @@ const NamingDash = (() => {
                 return `<span class="row-num text-muted">${value}</span>`;
 
             case 'overallStatus':
-                if (value === 'match') return '<span class="badge badge-success"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>';
-                return '<span class="badge badge-error"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span>';
+                return statusBadge(value === 'match', 14);
 
             case 'filenameStatus':
             case 'dirStatus':
             case 'seasonDirStatus':
             case 'showDirStatus':
-                if (value === 'match') return '<span class="badge badge-success"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>';
-                return '<span class="badge badge-error"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span>';
+                return statusBadge(value === 'match');
 
             case 'showTitle':
                 return `<span title="${escapeHTML(String(value))}">${escapeHTML(truncate(String(value), 35))}</span>`;
@@ -847,10 +822,9 @@ const NamingDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //===========
     // DETAIL ROW
-    // --------------------------------------------------------
-
+    //===========
     function _renderDetail(item, libraryType) {
         let html = '<div class="detail-content">';
         if (libraryType === 'movie') {
@@ -923,10 +897,9 @@ const NamingDash = (() => {
         return html;
     }
 
-    // --------------------------------------------------------
+    //====================
     // MOBILE DETAIL PANEL
-    // --------------------------------------------------------
-
+    //====================
     function _openMobilePanel(item) {
         const panel = document.getElementById('mobileDetailPanel');
         if (!panel || !item) return;
@@ -948,7 +921,7 @@ const NamingDash = (() => {
         document.getElementById('mobilePanelBackdrop').onclick = _closeMobilePanel;
         document.getElementById('mobilePanelClose').onclick = _closeMobilePanel;
 
-        // SWIPE-TO-CLOSE: SAME BOTTOM-SHEET FEEL AS SEARCH
+        // Swipe-to-close: same bottom-sheet feel as search
         const sheet = document.getElementById('mobilePanelSheet');
         const body  = document.getElementById('mobilePanelBody');
         let startY = 0, dragActive = false, isClosing = false;
@@ -1095,18 +1068,12 @@ const NamingDash = (() => {
         return html;
     }
 
-    // --------------------------------------------------------
+    //===========
     // PAGINATION
-    // --------------------------------------------------------
-
+    //===========
     function _renderPagination() {
         const bar = document.getElementById('namingPaginationBar');
-        if (state.totalItems === 0) { bar.style.display = 'none'; return; }
-
-        bar.style.display = 'flex';
         const typeLabel = state.activeLibraryType === 'movie' ? 'movies' : 'episodes';
-        const start = (state.page - 1) * state.perPage + 1;
-        const end = Math.min(state.page * state.perPage, state.totalItems);
 
         const isPartial = dataCache[state.activeLibrary] && !dataCache[state.activeLibrary].enriched;
         let syncInfo = '';
@@ -1120,27 +1087,21 @@ const NamingDash = (() => {
                 syncInfo = ` \u00B7 <span class="badge badge-info">Analyzing episodes\u2026</span>`;
             }
         }
-        bar.innerHTML = `
-            <div class="pagination-info">${start.toLocaleString()}-${end.toLocaleString()} of ${state.totalItems.toLocaleString()} ${typeLabel}${syncInfo}</div>
-            <div class="pagination-controls">
-                <button class="btn btn-sm" id="namingPrevPage" ${state.page <= 1 ? 'disabled' : ''}>\u2190 Previous</button>
-                <span class="page-indicator">Page ${state.page} of ${state.totalPages || 1}</span>
-                <button class="btn btn-sm" id="namingNextPage" ${state.page >= state.totalPages ? 'disabled' : ''}>Next \u2192</button>
-            </div>
-        `;
 
-        document.getElementById('namingPrevPage').addEventListener('click', () => {
-            if (state.page > 1) { state.page--; state.expandedRow = null; _applyView(); }
-        });
-        document.getElementById('namingNextPage').addEventListener('click', () => {
-            if (state.page < state.totalPages) { state.page++; state.expandedRow = null; _applyView(); }
+        renderPaginationBar({
+            bar,
+            page: state.page,
+            totalPages: state.totalPages,
+            totalItems: state.totalItems,
+            perPage: state.perPage,
+            totalHTML: `${state.totalItems.toLocaleString()} ${typeLabel}${syncInfo}`,
+            onPage: (p) => { state.page = p; state.expandedRow = null; _applyView(); },
         });
     }
 
-    // --------------------------------------------------------
-    // UI STATE HELPERS
-    // --------------------------------------------------------
-
+    //====================
+    // UI STATE MANAGEMENT
+    //====================
     function _showLoading(show, message) {
         const el = document.getElementById('namingLoading');
         el.style.display = show ? 'flex' : 'none';
@@ -1179,10 +1140,9 @@ const NamingDash = (() => {
     function _showTable() { document.getElementById('namingTableWrapper').style.display = 'block'; }
     function _hideTable() { document.getElementById('namingTableWrapper').style.display = 'none'; }
 
-    // --------------------------------------------------------
+    //===========
     // PUBLIC API
-    // --------------------------------------------------------
-
+    //===========
     function invalidateCache() {
         for (const key of Object.keys(dataCache)) _evictCacheEntry(key);
         _stopEnrichmentPolling();

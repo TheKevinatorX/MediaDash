@@ -19,25 +19,23 @@ from shared import (
 fetch_logger = logging.getLogger('mediadash.search')
 api_logger = logging.getLogger('mediadash.search.api')
 
-# ============================================================
-# CALCULATIONS (imported from calculations.py)
-# ============================================================
-
+#=============================================
+# CALCULATIONS (IMPORTED FROM CALCULATIONS.PY)
+#=============================================
 from calculations import (
     RESOLUTION_LABELS, _compute_dominant_resolution, build_season_size_list,
 )
 
-# ============================================================
+#================
 # DATA EXTRACTION
-# ============================================================
-
-# EXTRACT MOVIE METADATA FROM PLEX MOVIE OBJECT
+#================
+# Extract movie metadata from PLEX movie object
 def extract_movie_data(movie):
-    # PLEX STORES FIRST MEDIA AND PART AS PRIMARY
+    # PLEX stores first media and part as primary
     media = movie.media[0] if movie.media else None
     part = media.parts[0] if media and media.parts else None
 
-    # COLLECT SUBTITLE METADATA FROM PART STREAMS (TYPE 3 = SUBTITLE, EMBEDDED OR EXTERNAL)
+    # Collect subtitle metadata from part streams (type 3 = subtitle, embedded or external)
     subtitles = []
     if part:
         try:
@@ -98,7 +96,7 @@ def extract_movie_data(movie):
     }
 
 
-# TMDB STATUS INTEGRATION — MAPS TMDB API STATUS TO DISPLAY LABELS
+# TMDB status integration — maps TMDB API status to display labels
 _TMDB_STATUS_MAP = {
     'returning series': 'Returning',
     'in production':    'Returning',
@@ -116,7 +114,7 @@ def _fetch_show_status(show):
     tmdb_api_key = _shared.TMDB_API_KEY
     if not tmdb_api_key:
         return 'Unknown'
-    # PARSE TMDB ID FROM PLEX SHOW GUIDS (EG. "tmdb://12345")
+    # Parse TMDB ID from PLEX show guids (eg. "tmdb://12345")
     tmdb_id = None
     for guid in getattr(show, 'guids', []):
         gid = getattr(guid, 'id', '')
@@ -125,12 +123,12 @@ def _fetch_show_status(show):
             break
     if not tmdb_id:
         return 'Unknown'
-    # RETURN CACHED STATUS IF STILL FRESH
+    # Return cached status if still fresh
     now = time.time()
     cached = _tmdb_status_cache.get(tmdb_id)
     if cached and (now - cached['ts']) < _TMDB_STATUS_CACHE_TTL:
         return cached['status']
-    # FETCH FROM TMDB API
+    # Fetch from TMDB API
     try:
         resp = requests.get(
             f'https://api.themoviedb.org/3/tv/{tmdb_id}',
@@ -150,12 +148,12 @@ def _fetch_show_status(show):
     return status
 
 
-# EXTRACT SHOW METADATA FROM PLEX SHOW OBJECT
+# Extract show metadata from PLEX show object
 def extract_show_data(show):
     total_episodes = getattr(show, 'leafCount', 0) or 0
     watched_episodes = getattr(show, 'viewedLeafCount', 0) or 0
 
-    # CALCULATE WATCH STATUS FROM EPISODE COUNTS
+    # Calculate watch status from episode counts
     if total_episodes > 0 and watched_episodes >= total_episodes:
         watch_status = 'Watched'
     elif watched_episodes > 0:
@@ -189,7 +187,7 @@ def extract_show_data(show):
         'lastPlayedAt': show.lastViewedAt.isoformat() if show.lastViewedAt else None,
         'lastPlayedAtFormatted': format_date(show.lastViewedAt),
         'filePath': show.locations[0] if getattr(show, 'locations', None) else None,
-        # EPISODE AGGREGATION — FILLED BY BACKGROUND ENRICHMENT
+        # Episode Aggregation — Filled BY Background Enrichment
         'totalSize': 0,
         'totalSizeFormatted': None,
         'totalDuration': 0,
@@ -203,25 +201,23 @@ def extract_show_data(show):
     }
 
 
-# MAP LIBRARY TYPE TO EXTRACTION FUNCTION
+# Map library type to extraction function
 EXTRACTORS = {
     'movie': extract_movie_data,
     'show': extract_show_data,
 }
 
 
-# ============================================================
-# COLUMN DEFINITIONS (imported from customizable_columns.py)
-# ============================================================
-
+#===========================================================
+# COLUMN DEFINITIONS (IMPORTED FROM CUSTOMIZABLE_COLUMNS.PY)
+#===========================================================
 from customizable_columns import COLUMN_DEFINITIONS
 
 
-# ============================================================
+#=============================
 # EPISODE METADATA AGGREGATION
-# ============================================================
-
-# FETCH ALL EPISODES IN ONE API CALL AND AGGREGATE BY SHOW AND SEASON
+#=============================
+# Fetch all episodes in one API call and aggregate by show and season
 def fetch_episode_metadata(section):
     fetch_logger.info("Fetching all episode metadata...")
     ep_start = time.time()
@@ -256,7 +252,7 @@ def fetch_episode_metadata(section):
             if show_key not in meta:
                 meta[show_key] = {'total_size': 0, 'total_duration': 0, 'seasons': {}, 'resolutions': {}, 'subtitle_langs': set()}
 
-            # COLLECT SUBTITLE LANGUAGES FROM EPISODE STREAMS (TYPE 3 = SUBTITLE)
+            # Collect subtitle languages from episode streams (type 3 = subtitle)
             try:
                 if ep.media and ep.media[0].parts:
                     for stream in getattr(ep.media[0].parts[0], 'streams', []):
@@ -268,8 +264,8 @@ def fetch_episode_metadata(section):
                                 'Unknown'
                             )
                             meta[show_key]['subtitle_langs'].add(lang)
-            except Exception:
-                pass
+            except Exception as e:
+                fetch_logger.debug(f"Subtitle stream read failed for episode '{getattr(ep, 'title', 'unknown')}': {e}")
 
             meta[show_key]['total_size'] += ep_size
             meta[show_key]['total_duration'] += ep_duration
@@ -288,7 +284,7 @@ def fetch_episode_metadata(section):
                 meta[show_key]['seasons'][season_title]['resolutions'][res_key] = \
                     meta[show_key]['seasons'][season_title]['resolutions'].get(res_key, 0) + 1
 
-        # COMPUTE DOMINANT RESOLUTION PER SHOW: PLURALITY, TIE-BREAK BY HIGHER RANK
+        # Compute Dominant Resolution PER SHOW: Plurality, Tie-break BY Higher RANK
         for show_data in meta.values():
             label, rank = _compute_dominant_resolution(show_data.get('resolutions', {}))
             show_data['dominant_resolution'] = label
@@ -302,7 +298,7 @@ def fetch_episode_metadata(section):
     return meta
 
 
-# FETCH RAW PER-EPISODE ROWS FOR ONE SEASON OF ONE SHOW, ON DEMAND (NOT CACHED)
+# Fetch raw per-episode rows for one season of one show, on demand (not cached)
 # Mirrors fetch_episode_metadata's per-episode extraction shape but returns
 # individual rows instead of rolling them up — used by the Episodes drill-down.
 def fetch_episodes_for_season(show, season_name):
@@ -343,7 +339,7 @@ def fetch_episodes_for_season(show, season_name):
     return rows
 
 
-# MERGE EPISODE METADATA INTO SHOW ITEMS LIST IN-PLACE
+# Merge Episode Metadata INTO SHOW Items LIST In-place
 def _merge_episode_meta(items, episode_meta, progress_fn=None):
     total = len(items)
     for i, item in enumerate(items):
@@ -363,11 +359,10 @@ def _merge_episode_meta(items, episode_meta, progress_fn=None):
             progress_fn(i + 1, total)
 
 
-# ============================================================
+#=================
 # FETCH WITH CACHE
-# ============================================================
-
-# APPLY SEARCH SORT AND PAGINATION SERVER-SIDE
+#=================
+# Apply search sort and pagination server-side
 def apply_table_operations(data, search=None, sort_by=None, sort_dir='asc', page=1, per_page=25):
     if search:
         search_lower = search.lower()
@@ -407,7 +402,7 @@ def apply_table_operations(data, search=None, sort_by=None, sort_dir='asc', page
     }
 
 
-# APPLY SHORT DURATION STRINGS TO DISPLAY ITEMS WITHOUT MUTATING CACHE
+# Apply short duration strings to display items without mutating cache
 # Cache may contain older long-form duration strings; non-Summary pages should stay compact.
 def _short_duration_display_items(items):
     display_items = []

@@ -1,16 +1,23 @@
-// ################################################
-// # PROGRESS HUB — BACKGROUND TASK PANEL       #
-// ################################################
-
-// ============================================================
-// PROGRESS HUB — GLOBAL BACKGROUND ANALYSIS PANEL
-// ============================================================
+// ########################################
+// # PROGRESS HUB — BACKGROUND TASK PANEL #
+// ########################################
 
 const ProgressHub = (() => {
+    //===================
+    // USER CONFIGURATION
+    //===================
     const POLL_INTERVAL        = 3000;  // MS BETWEEN POLLS
     const RATE_HISTORY_MAX     = 10;    // SAMPLES KEPT PER TASK FOR RATE CALCULATION
     const ETA_MIN_SAMPLES      = 3;     // SAMPLES REQUIRED BEFORE SHOWING ETA
+    const INIT_GRACE_POLLS     = 3;     // POLLS TO WAIT BEFORE TREATING BACKEND AS IDLE
 
+    //---------------------------------------------------------------
+    // DO NOT MODIFY BEYOND THIS LINE UNLESS CHANGING LOGIC
+    //---------------------------------------------------------------
+
+    //======
+    // STATE
+    //======
     let _pollTimer             = null;
     let _completeTimer         = null;
     let _isVisible             = false;
@@ -19,7 +26,6 @@ const ProgressHub = (() => {
     let _firstPoll             = true;
     let _isInitializing        = false;
     let _initGraceCount        = 0;
-    const INIT_GRACE_POLLS     = 3;
     let _rateHistory           = {};           // KEY -> [{TS, CURRENT}, ...]
     let _taskSnapshot          = {};           // KEY -> LAST-KNOWN ACTIVE TASK DATA
     let _completedTasks        = [];           // [{KEY, LIBRARY, TYPE, COMPLETEDAT}, ...]
@@ -28,13 +34,12 @@ const ProgressHub = (() => {
     let _touchStartY           = 0;
     let _expandedCompletedKeys = new Set();
 
-    // DOM HELPER — LAZILY RESOLVED
+    // DOM helper — lazily resolved
     const $ = id => document.getElementById(id);
 
-    // --------------------------------------------------------
+    //=======
     // PUBLIC
-    // --------------------------------------------------------
-
+    //=======
     function init() {
         const hub0 = $('progressHub');
         if (!hub0 || hub0.dataset.phubInit) return;
@@ -49,28 +54,15 @@ const ProgressHub = (() => {
         if (closeBtn) closeBtn.addEventListener('click', _hide);
         _initSwipe();
 
-        $('phubTitle').textContent      = 'Connecting…';
-        $('phubBadge').textContent      = '…';
-        $('phubFooterText').textContent = 'Checking Plex status';
-        const tasks = $('phubTasks');
-        if (tasks) {
-            tasks.innerHTML = `
-                <div class="phub-init-row">
-                    <span class="phub-init-text">Connecting to Plex…</span>
-                    <div class="phub-init-bar-track"><div class="phub-init-bar"></div></div>
-                </div>`;
-        }
         _isInitializing = true;
-        _show();
         _schedulePoll();
     }
 
-    // --------------------------------------------------------
+    //========
     // POLLING
-    // --------------------------------------------------------
-
+    //========
     function _schedulePoll() {
-        // FIRST POLL FIRES QUICKLY; SUBSEQUENT POLLS USE THE FULL INTERVAL
+        // First poll fires quickly; subsequent polls use the full interval
         const delay = _firstPoll ? 600 : POLL_INTERVAL;
         _firstPoll  = false;
         _pollTimer  = setTimeout(_poll, delay);
@@ -80,32 +72,34 @@ const ProgressHub = (() => {
         try {
             const data = await api('/api/progress');
             _update(data.tasks || []);
-        } catch (_) {
+        } catch (err) {
+            console.warn('Progress poll failed: /api/progress', err?.message || err);
             if (_isInitializing) {
                 _isInitializing = false;
                 _initGraceCount = 0;
-                _hide();
+                if (_isVisible) _hide();
             }
         }
         _schedulePoll();
     }
 
-    // --------------------------------------------------------
+    //=============
     // STATE UPDATE
-    // --------------------------------------------------------
-
+    //=============
     function _update(tasks) {
         const active = tasks.filter(t => t.status === 'running' || t.status === 'pending');
+        const failed = tasks.filter(t => t.status === 'error');
+        const visibleTasks = active.concat(failed);
 
         if (_isInitializing) {
-            if (active.length === 0) {
+            if (visibleTasks.length === 0) {
                 _initGraceCount++;
-                if (_initGraceCount < INIT_GRACE_POLLS) return; // keep "Connecting…" visible
+                if (_initGraceCount < INIT_GRACE_POLLS) return;
                 _isInitializing = false;
                 _initGraceCount = 0;
                 const tasksEl = $('phubTasks');
                 if (tasksEl) tasksEl.innerHTML = '';
-                _hide();
+                if (_isVisible) _hide();
                 return;
             }
             _isInitializing = false;
@@ -114,11 +108,11 @@ const ProgressHub = (() => {
             if (tasksEl) tasksEl.innerHTML = '';
         }
 
-        const activeKeys = new Set(active.map(t => t.key));
+        const activeKeys = new Set(visibleTasks.map(t => t.key));
         const now = Date.now();
 
-        // TRACK NEWLY-FINISHED TASKS WHILE OTHERS ARE STILL RUNNING
-        if (active.length > 0) {
+        //Track Newly-finished Tasks While Others ARE Still Running
+        if (visibleTasks.length > 0) {
             for (const [key, snap] of Object.entries(_taskSnapshot)) {
                 if (!activeKeys.has(key) && !_completedTasks.find(c => c.key === key)) {
                     const startedAt = _taskStartTimes[key] || now;
@@ -138,11 +132,11 @@ const ProgressHub = (() => {
         }
 
         _taskSnapshot = {};
-        for (const t of active) _taskSnapshot[t.key] = t;
+        for (const t of visibleTasks) _taskSnapshot[t.key] = t;
 
-        if (active.length === 0) {
+        if (visibleTasks.length === 0) {
             if (Object.keys(_auxBusy).length > 0) {
-                // BACKEND IDLE BUT FRONTEND TASKS STILL RUNNING — KEEP HUB OPEN
+                // Backend idle but frontend tasks still running — keep hub open
                 const container = $('phubTasks');
                 if (container) container.innerHTML = '';
                 _renderAuxTasks();
@@ -160,24 +154,26 @@ const ProgressHub = (() => {
         const hub = $('progressHub');
         hub.classList.remove('phub--complete', 'phub--fading');
 
-        // RECORD FIRST-SEEN TIMESTAMP FOR ELAPSED TIME DISPLAY
+        // Record first-seen timestamp for elapsed time display
         active.forEach(t => {
             if (!_taskStartTimes[t.key]) _taskStartTimes[t.key] = Date.now();
         });
 
-        // UPDATE RATE HISTORY FOR ETA COMPUTATION
+        // Update rate history for ETA computation
         active.forEach(t => {
             if (t.total > 0 && t.current > 0) _pushRate(t.key, t.current);
         });
 
-        _renderTasks(active);
+        _renderTasks(visibleTasks);
 
         const n    = active.length;
+        const errN = failed.length;
         const auxN = Object.keys(_auxBusy).length;
         const done = _completedTasks.length;
-        $('phubBadge').textContent  = n + auxN;
-        $('phubTitle').textContent  = n === 1 ? 'Analyzing Library' : 'Analyzing Libraries';
+        $('phubBadge').textContent  = n + auxN + errN;
+        $('phubTitle').textContent  = errN > 0 && n === 0 ? 'Action Needed' : (n === 1 ? 'Analyzing Library' : 'Analyzing Libraries');
         const footerParts = [`${n} task${n !== 1 ? 's' : ''} running`];
+        if (errN > 0) footerParts.push(`${errN} needs attention`);
         if (auxN > 0) footerParts.push(`${auxN} loading`);
         if (done > 0) footerParts.push(`${done} completed`);
         $('phubFooterText').textContent = footerParts.join(' · ');
@@ -185,14 +181,17 @@ const ProgressHub = (() => {
         if (!_isVisible) _show();
     }
 
-    // --------------------------------------------------------
+    //===============
     // TASK RENDERING
-    // --------------------------------------------------------
-
+    //===============
     function _buildActiveTaskHtml(task) {
+        if (task.status === 'error') return _buildErrorTaskHtml(task);
+
+        const isPlexFetch = String(task.phase || '').toLowerCase() === 'plex fetch';
         const pct = (task.total > 0 && task.current > 0)
             ? Math.min(Math.round((task.current / task.total) * 100), 99)
             : 0;
+        const indeterminate = task.status === 'pending' || task.total <= 0 || (isPlexFetch && task.current <= 0);
         const pending = task.status === 'pending' || (pct === 0 && !task.step);
         const eta     = _computeEta(task.key, task.current, task.total);
 
@@ -204,20 +203,23 @@ const ProgressHub = (() => {
         // ETA: show remaining + elapsed when both are available
         let etaStr;
         if (pending) {
-            etaStr = 'starting…';
+            etaStr = isPlexFetch ? _fmtElapsed(elapsed) : 'starting…';
         } else if (eta !== null) {
             etaStr = showTime ? `${_fmtEta(eta)} · ${_fmtElapsed(elapsed)}` : _fmtEta(eta);
         } else {
-            etaStr = showTime ? _fmtElapsed(elapsed) : 'calculating…';
+            etaStr = showTime || isPlexFetch ? _fmtElapsed(elapsed) : 'calculating…';
         }
 
         // ITEM LABEL — episode tasks and naming tasks count episodes
-        const itemLabel = task.type === 'naming' ? 'episodes'
+        const itemLabel = isPlexFetch ? 'Plex calls'
+            : task.type === 'health' ? 'files'
+            : task.type === 'naming' ? 'episodes'
             : (task.step && task.step.toLowerCase().includes('show')) ? 'shows'
             : 'items';
         const counts = (task.total > 0 && task.current >= 0)
             ? `${_fmtN(task.current)} / ${_fmtN(task.total)} ${itemLabel}`
             : 'preparing…';
+        const activity = _buildActivityHtml(task, elapsed, isPlexFetch);
 
         return `
             <div class="phub-task-top">
@@ -228,14 +230,64 @@ const ProgressHub = (() => {
                 <span class="phub-task-eta">${_esc(etaStr)}</span>
             </div>
             <div class="phub-task-step">${_esc(task.step || (pending ? 'Initializing…' : 'Working…'))}</div>
+            ${activity}
             <div class="phub-task-bar-row">
                 <div class="phub-task-bar-track">
-                    <div class="phub-task-bar-fill${pending ? ' phub-task-bar-fill--indeterminate' : ''}"
-                         style="${pending ? '' : `width:${pct}%`}"></div>
+                    <div class="phub-task-bar-fill${indeterminate ? ' phub-task-bar-fill--indeterminate' : ''}"
+                         style="${indeterminate ? '' : `width:${pct}%`}"></div>
                 </div>
-                <span class="phub-task-pct">${pending ? '' : pct + '%'}</span>
+                <span class="phub-task-pct">${indeterminate ? '' : pct + '%'}</span>
             </div>
             <div class="phub-task-counts">${counts}</div>
+        `;
+    }
+
+    function _buildErrorTaskHtml(task) {
+        const message = task.error || task.detail || 'This background task stopped before it could finish.';
+        return `
+            <div class="phub-task-top">
+                <div class="phub-task-name">
+                    <span class="phub-task-library">${_esc(task.library)}</span>
+                    <span class="phub-chip phub-chip--error">Issue</span>
+                </div>
+                <span class="phub-task-eta">stopped</span>
+            </div>
+            <div class="phub-task-step">Action needed before resync can continue</div>
+            <div class="phub-activity phub-activity--error">
+                <div class="phub-activity-rail" aria-hidden="true">
+                    <span class="phub-activity-node"></span>
+                    <span class="phub-activity-line"></span>
+                </div>
+                <div class="phub-activity-copy">
+                    <div class="phub-activity-phase">Resync stopped</div>
+                    <div class="phub-activity-detail">${_esc(message)}</div>
+                </div>
+            </div>
+            <div class="phub-task-counts">Fix the issue, then start the resync again.</div>
+        `;
+    }
+
+    function _buildActivityHtml(task, elapsed, isPlexFetch) {
+        const detail = task.detail || '';
+        if (!detail && !isPlexFetch) return '';
+
+        const phase = task.phase || (isPlexFetch ? 'Plex fetch' : 'Activity');
+        const pulseStyle = task.heartbeat ? ` style="animation-delay:${(task.heartbeat % 4) * -0.18}s"` : '';
+        const lines = detail
+            ? _esc(detail)
+            : `Plex is still responding · ${_esc(_fmtElapsed(elapsed))}`;
+
+        return `
+            <div class="phub-activity">
+                <div class="phub-activity-rail" aria-hidden="true">
+                    <span class="phub-activity-node"${pulseStyle}></span>
+                    <span class="phub-activity-line"></span>
+                </div>
+                <div class="phub-activity-copy">
+                    <div class="phub-activity-phase">${_esc(phase)}</div>
+                    <div class="phub-activity-detail">${lines}</div>
+                </div>
+            </div>
         `;
     }
 
@@ -245,12 +297,12 @@ const ProgressHub = (() => {
 
         const activeKeys = new Set(tasks.map(t => t.key));
 
-        // REMOVE ACTIVE ROWS NO LONGER IN THE ACTIVE SET
+        // Remove active rows no longer in the active set
         container.querySelectorAll('.phub-task').forEach(el => {
             if (!activeKeys.has(el.dataset.key)) el.remove();
         });
 
-        // INSERT/UPDATE ACTIVE TASK ROWS
+        //Insert/update Active TASK ROWS
         tasks.forEach((task, idx) => {
             const existing = container.querySelector(`.phub-task[data-key="${_cssAttr(task.key)}"]`);
             const html = _buildActiveTaskHtml(task);
@@ -270,20 +322,19 @@ const ProgressHub = (() => {
         _renderAuxTasks();
     }
 
-    // --------------------------------------------------------
+    //=============================================
     // AUX TASK RENDERING (FRONTEND-DRIVEN LOADING)
-    // --------------------------------------------------------
-
+    //=============================================
     function _renderAuxTasks() {
         const container = $('phubTasks');
         if (!container) return;
 
-        // REMOVE STALE AUX ROWS
+        //Remove Stale AUX ROWS
         container.querySelectorAll('.phub-aux-task').forEach(el => {
             if (!_auxBusy[el.dataset.auxKey]) el.remove();
         });
 
-        // ADD NEW AUX ROWS
+        // Add new aux rows
         Object.entries(_auxBusy).forEach(([key, label]) => {
             if (container.querySelector(`[data-aux-key="${_cssAttr(key)}"]`)) return;
             const row = document.createElement('div');
@@ -386,10 +437,9 @@ const ProgressHub = (() => {
         });
     }
 
-    // --------------------------------------------------------
+    //=======================
     // COMPLETE / SHOW / HIDE
-    // --------------------------------------------------------
-
+    //=======================
     function _triggerComplete() {
         _isComplete = true;
         _rateHistory = {};
@@ -457,10 +507,9 @@ const ProgressHub = (() => {
         }, { once: true });
     }
 
-    // --------------------------------------------------------
+    //=================================================
     // AUX BUSY — FRONTEND TASKS THAT KEEP THE HUB OPEN
-    // --------------------------------------------------------
-
+    //=================================================
     function setAuxBusy(key, busy, label) {
         const hub = $('progressHub');
         if (!hub) return;
@@ -488,10 +537,9 @@ const ProgressHub = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //================
     // COLLAPSE TOGGLE
-    // --------------------------------------------------------
-
+    //================
     function _onHeaderClick() {
         _isCollapsed = !_isCollapsed;
         $('progressHub').classList.toggle('phub--collapsed', _isCollapsed);
@@ -511,10 +559,9 @@ const ProgressHub = (() => {
         }, { passive: true });
     }
 
-    // --------------------------------------------------------
+    //================
     // ETA CALCULATION
-    // --------------------------------------------------------
-
+    //================
     function _pushRate(key, current) {
         if (!_rateHistory[key]) _rateHistory[key] = [];
         const h = _rateHistory[key];
@@ -535,10 +582,9 @@ const ProgressHub = (() => {
         return Math.round((total - current) / rate); // seconds
     }
 
-    // --------------------------------------------------------
-    // HELPERS
-    // --------------------------------------------------------
-
+    //=================
+    // RENDER UTILITIES
+    //=================
     function _fmtEta(secs) {
         if (secs < 10)   return '< 10 sec left';
         if (secs < 60)   return `~${Math.round(secs / 5) * 5} sec left`;
@@ -558,15 +604,15 @@ const ProgressHub = (() => {
     }
 
     function _chipCls(type) {
-        return { search: 'phub-chip--search', naming: 'phub-chip--naming', episodes: 'phub-chip--episodes', sync: 'phub-chip--sync', refresh: 'phub-chip--refresh' }[type]
+        return { search: 'phub-chip--search', naming: 'phub-chip--naming', episodes: 'phub-chip--episodes', sync: 'phub-chip--sync', refresh: 'phub-chip--refresh', health: 'phub-chip--refresh' }[type]
             || 'phub-chip--unknown';
     }
 
     function _chipLabel(type) {
-        return { search: 'Search', naming: 'Naming', episodes: 'Episodes', sync: 'Full Sync', refresh: 'Quick Refresh' }[type] || type;
+        return { search: 'Search', naming: 'Naming', episodes: 'Episodes', sync: 'Full Sync', refresh: 'Quick Refresh', health: 'Health' }[type] || type;
     }
 
-    // ESCAPE STRING FOR USE AS A CSS ATTRIBUTE SELECTOR VALUE (NO QUOTES)
+    // Escape string for use as a CSS attribute selector value (no quotes)
     function _cssAttr(str) {
         return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/]/g, '\\]');
     }

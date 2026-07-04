@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- #################### -->
+<!-- # MEDIADASH SHELL  # -->
+<!-- #################### -->
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
@@ -22,7 +25,7 @@
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
                     </svg>
                     <h1>MediaDash</h1>
-                    <span class="app-version" id="appVersion">v1.0.0</span><span class="version-status-dot" id="versionDot"></span>
+                    <span class="app-version" id="appVersion">checking</span><span class="version-status-dot" id="versionDot"></span><span class="version-update-pill" id="versionUpdatePill"></span>
                 </div>
                 <span class="server-badge" id="serverBadge"></span>
             </div>
@@ -384,79 +387,196 @@
 
         <!-- HEALTH PAGE -->
         <div id="page-health" class="page" style="display:none;">
-            <div class="page-container">
-                <div class="page-header">
-                    <h2 class="page-title">File Health</h2>
-                    <p class="page-subtitle">Scan your media files for corruption, missing streams, and playback issues.</p>
+            <!-- TOOLBAR -->
+            <div class="toolbar" id="healthToolbar">
+                <div class="toolbar-left">
+                    <div class="tab-bar" id="healthTabBar"></div>
                 </div>
+                <div class="toolbar-right">
+                    <div class="search-container">
+                        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="healthSearch" placeholder="Search titles..." autocomplete="off">
+                        <button class="search-clear" id="healthSearchClear" style="display:none;" title="Clear">&times;</button>
+                    </div>
+                    <div class="filter-group" id="healthFilters">
+                        <button class="filter-btn" data-filter="all">All</button>
+                        <button class="filter-btn active" data-filter="scanned">Scanned</button>
+                        <button class="filter-btn" data-filter="issues">Issues</button>
+                        <button class="filter-btn" data-filter="healthy">Healthy</button>
+                        <button class="filter-btn" data-filter="pending">Pending</button>
+                    </div>
+                    <div class="column-picker-wrapper" id="healthColumnPickerWrapper">
+                        <button class="btn btn-secondary" id="healthColumnPickerBtn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="4" width="18" height="16" rx="2"/>
+                                <line x1="9" y1="4" x2="9" y2="20"/>
+                                <line x1="15" y1="4" x2="15" y2="20"/>
+                            </svg>
+                            Columns
+                        </button>
+                        <div class="column-picker" id="healthColumnPicker" style="display:none;"></div>
+                    </div>
+                    <button class="btn btn-primary" id="quickScanBtn" title="Scan files that have not been checked yet. First run may take a long time; future runs only fill missing files. Existing health results are kept.">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Scan New
+                    </button>
+                    <button class="btn btn-secondary" id="fullRescanBtn" title="Re-scan every mounted media file. This can take a long time on large libraries — about 1h 30m for roughly 50,000 files. Existing results are preserved until each file is rechecked.">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.65"/></svg>
+                        Full Rescan
+                    </button>
+                    <button class="btn btn-secondary" id="cancelScanBtn" style="display:none;" title="Stop the current scan. Progress so far is kept, but the scan will not auto-resume until you start a new one.">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg>
+                        Cancel Scan
+                    </button>
+                </div>
+            </div>
 
-                <!-- SCAN CONTROLS -->
-                <div class="health-controls">
-                    <div class="health-scan-btn-group">
-                        <div class="health-scan-action">
-                            <button class="btn btn-primary" id="quickScanBtn">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                Quick Scan
-                            </button>
-                            <span class="health-last-scanned" id="quickLastScanned"></span>
-                        </div>
-                        <div class="health-scan-action">
-                            <button class="btn btn-ghost" id="deepScanBtn" title="Decodes every file end-to-end. May take 30–60+ minutes on large libraries.">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                Deep Scan
-                            </button>
-                            <span class="health-last-scanned" id="deepLastScanned"></span>
+            <!-- MEDIA MOUNT WARNING — shown when no media volumes are visible -->
+            <div class="health-mount-warning" id="healthMountWarning" style="display:none;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <div>
+                    <strong>No media mounts detected.</strong>
+                    Your libraries are synced, but none of their files are visible inside this container, so health scanning is disabled.
+                    Check that your media folders are mounted as volumes in <code>docker-compose.yml</code>, then recreate the container — a restart alone won't add missing mounts.
+                </div>
+            </div>
+
+            <!-- SCAN META PANEL — always visible -->
+            <div class="health-meta-panel" id="healthMetaPanel">
+                <div class="health-meta-card">
+                    <div class="health-meta-icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    <div class="health-meta-body">
+                        <div class="health-meta-label">Scan Coverage</div>
+                        <div class="health-meta-primary" id="healthMetaQuickPrimary">Never run</div>
+                        <div class="health-meta-secondary" id="healthMetaQuickSub">Run Scan New to check unscanned files</div>
+                        <div class="health-meta-coverage-extra" id="healthMetaCoverageExtra"></div>
+                    </div>
+                    <div class="health-meta-badge" id="healthMetaQuickBadge"></div>
+                </div>
+                <div class="health-meta-card health-meta-card--latest health-meta-card--latest-multi">
+                    <div class="health-meta-icon health-meta-icon--latest">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    </div>
+                    <div class="health-meta-body">
+                        <div class="health-meta-label">Latest Additions</div>
+                        <div class="health-meta-latest-rows" id="healthMetaLatestRows">
+                            <!-- rows injected by JS -->
                         </div>
                     </div>
                 </div>
-
-                <!-- PROGRESS BAR (hidden when idle) -->
-                <div class="health-progress-wrap" id="healthProgressWrap" style="display:none;">
-                    <div class="health-progress-label" id="healthProgressLabel">Scanning...</div>
-                    <div class="health-progress-bar-track">
-                        <div class="health-progress-bar-fill" id="healthProgressFill" style="width:0%"></div>
+                <div class="health-meta-card health-meta-card--latest health-meta-card--latest-multi">
+                    <div class="health-meta-icon health-meta-icon--latest">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/><polyline points="9 12 12 15 17 10"/></svg>
+                    </div>
+                    <div class="health-meta-body">
+                        <div class="health-meta-label">Latest Scanned</div>
+                        <div class="health-meta-latest-rows" id="healthMetaScannedRows">
+                            <!-- rows injected by JS -->
+                        </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- STALE WARNING -->
-                <div class="health-stale-warning" id="healthStaleWarning" style="display:none;"></div>
+            <div class="health-guide-banner" id="healthGuideBanner">
+                <button class="health-guide-toggle" id="healthGuideToggle" aria-expanded="false" aria-controls="healthGuideContent">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <span class="health-guide-label">Tiny Detective Guide</span>
+                    <span class="health-guide-chevron" aria-hidden="true">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </span>
+                </button>
+                <div class="health-guide-content" id="healthGuideContent">
+                    <div class="health-guide-card health-guide-card--story">
+                        <div class="health-guide-kicker">Summary</div>
+                        <p>MediaDash picks up each video file, asks “can this actually play?”, and puts a sticker on it. Green means the file answered like a normal video. Red means the file acted weird enough that you may want to inspect it.</p>
+                    </div>
+                    <div class="health-guide-card">
+                        <div class="health-guide-kicker">What are Issues?</div>
+                        <ul class="health-guide-list">
+                            <li><strong>Tiny or empty:</strong> the file is too small to be believable.</li>
+                            <li><strong>Unreadable:</strong> the container cannot be opened cleanly.</li>
+                            <li><strong>No video:</strong> it has no picture track.</li>
+                            <li><strong>No audio:</strong> it has no sound track.</li>
+                            <li><strong>Zero duration:</strong> it says it is a video, but reports no runtime.</li>
+                        </ul>
+                    </div>
+                    <div class="health-guide-card health-guide-card--flow">
+                        <div class="health-guide-kicker">Scan route</div>
+                        <div class="health-guide-route">
+                            <span>Shows 1st</span>
+                            <span>Animes 2nd</span>
+                            <span>Movies 3rd</span>
+                        </div>
+                        <p>Completed files are saved as they finish, so you can browse early results while the rest of the line keeps moving.</p>
+                    </div>
+                    <div class="health-guide-card health-guide-card--caution">
+                        <div class="health-guide-kicker">Full Rescan caution</div>
+                        <p><strong>Full Rescan checks every mounted media file again.</strong> On a very large library, that can take more than an hour. Existing results stay visible while it works, but starting it is still a long-running job.</p>
+                    </div>
+                </div>
+            </div>
 
-                <!-- SUMMARY BAR -->
-                <div class="health-summary-bar" id="healthSummaryBar" style="display:none;">
-                    <span id="healthSummaryScanned"></span>
-                    <span class="health-summary-sep">·</span>
-                    <span id="healthSummaryIssues"></span>
-                    <span class="health-summary-sep">·</span>
-                    <span id="healthSummaryClean"></span>
+            <!-- STATS BAR -->
+            <div class="health-stats-bar" id="healthStatsBar" style="display:none;"></div>
+
+            <!-- STALE WARNING -->
+            <div class="health-stale-warning" id="healthStaleWarning" style="display:none;"></div>
+
+            <main class="main-content">
+                <!-- NO SCAN YET STATE -->
+                <div class="state-overlay health-no-scan-state" id="healthNoScanState">
+                    <div class="hns-radar" aria-hidden="true">
+                        <div class="hns-sweep"></div>
+                        <div class="hns-ring hns-ring--sm"></div>
+                        <div class="hns-ring hns-ring--md"></div>
+                        <div class="hns-ring hns-ring--lg"></div>
+                        <div class="hns-blip" style="top:27%;left:63%;animation-delay:0s"></div>
+                        <div class="hns-blip" style="top:61%;left:28%;animation-delay:1.15s"></div>
+                        <div class="hns-blip" style="top:68%;left:71%;animation-delay:2.3s"></div>
+                        <div class="hns-center">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="1.5" stroke-linecap="round">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="hns-status-tag" id="healthNoScanTag">LOADING HEALTH DATA</div>
+                    <p class="hns-desc" id="healthNoScanDesc">Checking for previous scan results…</p>
+                    <div class="hns-features">
+                        <div class="hns-feature">
+                            <div class="hns-feature-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            </div>
+                            <div class="hns-feature-body">
+                                <strong>Integrity</strong>
+                                <span>Zero-byte, unreadable &amp; corrupt containers</span>
+                            </div>
+                        </div>
+                        <div class="hns-feature">
+                            <div class="hns-feature-icon">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+                            </div>
+                            <div class="hns-feature-body">
+                                <strong>Streams</strong>
+                                <span>Missing video or audio tracks, zero duration</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- RESULTS TABLE -->
-                <div class="health-table-wrap" id="healthTableWrap" style="display:none;">
+                <div class="table-wrapper" id="healthTableWrapper" style="display:none;">
                     <table class="data-table" id="healthTable">
-                        <thead>
-                            <tr>
-                                <th class="sortable" data-col="title">Title</th>
-                                <th class="sortable" data-col="library">Library</th>
-                                <th class="sortable" data-col="fileSize">File Size</th>
-                                <th>Issues</th>
-                                <th>Scan Depth</th>
-                            </tr>
-                        </thead>
+                        <thead id="healthTableHead"></thead>
                         <tbody id="healthTableBody"></tbody>
                     </table>
                 </div>
+            </main>
 
-                <!-- EMPTY STATE -->
-                <div class="health-empty-state" id="healthEmptyState" style="display:none;">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                    <p>All files healthy — no issues found.</p>
-                </div>
-
-                <!-- NO SCAN YET STATE -->
-                <div class="health-no-scan-state" id="healthNoScanState">
-                    <p>No scan has been run yet. Click <strong>Quick Scan</strong> to start.</p>
-                </div>
-            </div>
+            <!-- PAGINATION -->
+            <footer class="pagination-bar" id="healthPaginationBar" style="display:none;"></footer>
         </div>
 
         <!-- SETTINGS PAGE -->

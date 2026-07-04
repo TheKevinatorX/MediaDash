@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- #################### -->
+<!-- # MEDIADASH SETUP  # -->
+<!-- #################### -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -10,6 +13,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        /* #################### */
+        /* # SETUP WIZARD CSS # */
+        /* #################### */
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
@@ -689,7 +696,7 @@
         <!-- ── FORM PANEL ─────────────────────────────── -->
         <div class="form-panel">
 
-            <!-- Step progress track -->
+            <!-- STEP PROGRESS TRACK -->
             <div class="step-track">
                 <div class="step-node active" id="sn0">
                     <div class="step-circle active" id="sc0">01</div>
@@ -717,7 +724,7 @@
                 </div>
             </div>
 
-            <!-- ── Step 0: Welcome ────────────────────── -->
+            <!-- ── STEP 0: WELCOME ────────────────────── -->
             <div class="step-panel active" id="sp0">
                 <div class="eyebrow">Initialization</div>
                 <div class="step-h">Welcome to<br>MediaDash</div>
@@ -743,7 +750,7 @@
                 </div>
             </div>
 
-            <!-- ── Step 1: Connect ────────────────────── -->
+            <!-- ── STEP 1: CONNECT ────────────────────── -->
             <div class="step-panel" id="sp1">
                 <div class="eyebrow">Step 01 of 03</div>
                 <div class="step-h">Connect to Plex</div>
@@ -795,7 +802,7 @@
                 </div>
             </div>
 
-            <!-- ── Step 2: Libraries ─────────────────────────────── -->
+            <!-- ── STEP 2: LIBRARIES ─────────────────────────────── -->
             <div class="step-panel" id="sp2">
                 <div class="eyebrow">Step 02 of 03</div>
                 <div class="step-h">Choose Libraries</div>
@@ -811,7 +818,7 @@
                 </div>
             </div>
 
-            <!-- ── Step 3: Configure ──────────────────── -->
+            <!-- ── STEP 3: CONFIGURE ──────────────────── -->
             <div class="step-panel" id="sp3">
                 <div class="eyebrow">Step 03 of 03</div>
                 <div class="step-h">Naming Preferences</div>
@@ -915,7 +922,7 @@
                 </div>
             </div>
 
-            <!-- ── Step 4: Success ────────────────────── -->
+            <!-- ── STEP 4: SUCCESS ────────────────────── -->
             <div class="step-panel" id="sp4">
                 <div style="flex:1;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;padding-bottom:32px;">
                     <div class="success-ring">
@@ -944,9 +951,15 @@
 </div><!-- /setup-root -->
 
 <script>
+// #######################
+// # SETUP WIZARD SCRIPT #
+// #######################
 (function () {
     'use strict';
 
+    //=============
+    // CONSTANTS
+    //=============
     const SIGNALS = ['AWAITING SIGNAL', 'ACQUIRING SIGNAL', 'SIGNAL LOCKED', 'LIBRARY LOCK', 'LAUNCH READY'];
     const STRIPS  = [[0,0,0,0,0],[1,0,0,0,0],[1,1,0,0,0],[1,1,1,0,0],[1,1,1,1,1]];
 

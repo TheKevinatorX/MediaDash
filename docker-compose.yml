@@ -1,4 +1,7 @@
+#========== MEDIADASH STACK ==========#
+
 services:
+  ### DASHBOARD
   mediadash:
     image: ghcr.io/thekevinatorx/mediadash:latest
     container_name: MediaDash

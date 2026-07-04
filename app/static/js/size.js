@@ -1,17 +1,12 @@
-// ############################################
-// # SIZE PAGE — FILE SIZE ANALYSIS          #
-// ############################################
-
-// ============================================================
-// SIZE PAGE — FILE SIZE ANALYSIS (IIFE MODULE)
-// ============================================================
+// ##################################
+// # SIZE PAGE — FILE SIZE ANALYSIS #
+// ##################################
 
 const SizeDash = (() => {
 
-    // --------------------------------------------------------
+    //======
     // STATE
-    // --------------------------------------------------------
-
+    //======
     const state = {
         libraries: [],
         activeLibrary: null,
@@ -42,12 +37,9 @@ const SizeDash = (() => {
     // PENDING FILTER — SET BY navigateWithFilter(), CONSUMED ONCE BY _switchLibrary()
     let _pendingFilter = null;
 
-    // --------------------------------------------------------
+    //===================
     // COLUMN DEFINITIONS
-    // --------------------------------------------------------
-
-    function _isMobile() { return window.innerWidth <= 640; }
-
+    //===================
     const MOVIE_COLS = [
         { key: 'rank',              label: '#',        mobileLabel: '#',     sortable: false },
         { key: 'title',             label: 'Title',    mobileLabel: 'Title', sortable: true  },
@@ -57,6 +49,7 @@ const SizeDash = (() => {
         { key: 'container',         label: 'EXT',      mobileLabel: 'EXT',   sortable: true  },
         { key: 'durationFormatted', label: 'Duration', mobileLabel: 'Dur',   sortable: false },
         { key: 'year',              label: 'Year',     mobileLabel: 'Yr',    sortable: true  },
+        { key: 'addedAt',           label: 'Added',    mobileLabel: 'Add',   sortable: true  },
     ];
 
     const MOVIE_MOBILE_COLS = [
@@ -77,6 +70,7 @@ const SizeDash = (() => {
         { key: 'totalDurationFormatted', label: 'Duration', mobileLabel: 'Dur',   sortable: false },
         { key: 'year',                   label: 'Year',     mobileLabel: 'Yr',    sortable: true  },
         { key: 'showStatus',             label: 'Status',   mobileLabel: 'Stat',  sortable: true  },
+        { key: 'addedAt',                label: 'Added',    mobileLabel: 'Add',   sortable: true  },
     ];
 
     const SHOW_MOBILE_COLS = [
@@ -97,6 +91,7 @@ const SizeDash = (() => {
         { key: 'durationFormatted',  label: 'Duration', mobileLabel: 'Dur',  sortable: false },
         { key: 'library',            label: 'Library',  mobileLabel: 'Lib',  sortable: true  },
         { key: 'year',               label: 'Year',     mobileLabel: 'Yr',   sortable: true  },
+        { key: 'addedAt',            label: 'Added',    mobileLabel: 'Add',  sortable: true  },
     ];
 
     const SEASON_MOBILE_COLS = [
@@ -107,10 +102,9 @@ const SizeDash = (() => {
         { key: 'dominantResolution', label: 'Res',  sortable: true  },
     ];
 
-    // --------------------------------------------------------
+    //================
     // BLOAT DETECTION
-    // --------------------------------------------------------
-
+    //================
     const BLOAT_GB = 1024 ** 3;
     const MOVIE_HD_LIMIT_GB = 4;   // flag HD movies over 4 GB
     const MOVIE_4K_LIMIT_GB = 5;   // flag 4K movies over 5 GB
@@ -274,6 +268,7 @@ const SizeDash = (() => {
                         duration: season.duration || 0,
                         durationFormatted: season.durationFormatted || '-',
                         year: show.year || null,
+                        addedAt: show.addedAt || null,
                     });
                 }
             }
@@ -283,10 +278,9 @@ const SizeDash = (() => {
             .map((s, i) => ({ ...s, rank: i + 1 }));
     }
 
-    // --------------------------------------------------------
+    //=====
     // INIT
-    // --------------------------------------------------------
-
+    //=====
     async function init() {
         _showLoading(true, 'Connecting to Plex...');
 
@@ -301,8 +295,12 @@ const SizeDash = (() => {
 
             _renderTabs();
             _setupEventListeners();
-            await _switchLibrary(state.libraries[0].title, state.libraries[0].type);
-            // SILENTLY PRE-WARM ALL SHOW LIBRARIES SO THE SEASONS TAB IS READY
+            const pendingLib = _pendingFilter
+                ? state.libraries.find(l => l.title === _pendingFilter.libraryTitle)
+                : null;
+            const initialLib = pendingLib || state.libraries[0];
+            await _switchLibrary(initialLib.title, initialLib.type);
+            // Silently pre-warm all show libraries so the seasons tab is ready
             _prefetchShowLibraries();
         } catch (err) {
             _showError(err.message);
@@ -313,10 +311,9 @@ const SizeDash = (() => {
         init();
     }
 
-    // --------------------------------------------------------
+    //================
     // EVENT LISTENERS
-    // --------------------------------------------------------
-
+    //================
     const QF_IDS = {
         criticRating: 'qfSizeCriticRating',
         audienceRating: 'qfSizeAudienceRating',
@@ -332,7 +329,7 @@ const SizeDash = (() => {
         }
     }
 
-    // APPLY A FILTERSPEC (picklist/text/quick/function) TO STATE + UI — SHARED BY navigateWithFilter + _switchLibrary
+    // Apply a filterspec (picklist/text/quick/function) to state + UI — shared by navigatewithfilter + _switchlibrary
     function _applyFilterSpec(filterType, filterKey, filterValue) {
         switch (filterType) {
             case 'picklist':
@@ -351,10 +348,9 @@ const SizeDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //===============================
     // COLUMN-HEADER FILTER DROPDOWNS
-    // --------------------------------------------------------
-
+    //===============================
     const FILTER_PLACEHOLDERS = {
         title: 'Search title...', year: '4-digit year...', rating: 'e.g. 7.5',
         resolution: 'e.g. 1080, 4k', fileSizeFormatted: 'e.g. 5.0 GB',
@@ -499,7 +495,7 @@ const SizeDash = (() => {
             _applyView();
         });
 
-        // QUICK FILTER DROPDOWNS
+        //Quick Filter Dropdowns
         for (const [key, elId] of Object.entries(QF_IDS)) {
             const el = document.getElementById(elId);
             if (!el) continue;
@@ -549,11 +545,10 @@ const SizeDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //==================
     // LIBRARY SWITCHING
-    // --------------------------------------------------------
-
-    function _switchToSeasons() {
+    //==================
+    async function _switchToSeasons() {
         _closeMobilePanel();
         _stopEnrichmentPolling();
         _stopSeasonAnalysisPolling();
@@ -561,10 +556,12 @@ const SizeDash = (() => {
 
         state.viewMode = 'seasons';
         colMgr.loadColumnWidths();
+        colMgr.loadMobileColumnWidths();
         colMgr.loadVisibleColumns(() => _defaultDesktopCols());
         colMgr.loadMobileColumns();
         colMgr.loadColumnLabels();
         colMgr.loadColumnOrder();
+        await colMgr.loadRemoteState();
         state.columnPickerOpen = false;
         document.getElementById('sizeColumnPicker').style.display = 'none';
         state.page = 1;
@@ -586,14 +583,14 @@ const SizeDash = (() => {
             // DATA ALREADY AVAILABLE \u2014 SHOW TABLE IMMEDIATELY
             _hideSeasonAnalysis();
             _applyView();
-            // KEEP POLLING ONLY IF A SYNC/STARTUP WORKER IS ACTUALLY RUNNING
+            // Keep polling only if a sync/startup worker is actually running
             if (showLibs.some(l => !dataCache[l.title]?.enriched && dataCache[l.title]?.enrichmentRunning)) {
                 _startSeasonAnalysisPolling(showLibs);
             }
         } else if (showLibs.length === 0) {
             _applyView();
         } else {
-            // NOTHING CACHED YET \u2014 SHOW ANALYSIS PANEL AND FETCH EVERYTHING
+            // Nothing cached yet \u2014 show analysis panel and fetch everything
             _loadAllShowLibrariesForSeasons();
         }
     }
@@ -610,10 +607,12 @@ const SizeDash = (() => {
         state.activeLibraryType = type;
         state.enrichmentProgress = null;
         colMgr.loadColumnWidths();
+        colMgr.loadMobileColumnWidths();
         colMgr.loadVisibleColumns(() => _defaultDesktopCols());
         colMgr.loadMobileColumns();
         colMgr.loadColumnLabels();
         colMgr.loadColumnOrder();
+        await colMgr.loadRemoteState();
         state.columnPickerOpen = false;
         document.getElementById('sizeColumnPicker').style.display = 'none';
         state.page = 1;
@@ -652,10 +651,9 @@ const SizeDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //==============
     // TAB RENDERING
-    // --------------------------------------------------------
-
+    //==============
     function _tabOrder(title) {
         const t = title.toLowerCase();
         if (t.includes('movie'))  return 0;
@@ -678,12 +676,9 @@ const SizeDash = (() => {
             const refreshBtn = document.createElement('button');
             refreshBtn.className = 'tab-refresh-btn';
             refreshBtn.type = 'button';
-            refreshBtn.title = `Quick refresh "${lib.title}" from Plex`;
-            refreshBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"/>
-                <polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>`;
+            refreshBtn.title = `Resync ${_libraryScopeLabel(lib.title, lib.type)} from Plex and recalculate sizes`;
+            refreshBtn.setAttribute('aria-label', refreshBtn.title);
+            refreshBtn.innerHTML = SVG_REFRESH;
             refreshBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 _quickRefreshLibrary(lib.title, lib.type, refreshBtn);
@@ -692,7 +687,7 @@ const SizeDash = (() => {
             bar.appendChild(btn);
         }
 
-        // SEASONS VIRTUAL TAB
+        //Seasons Virtual TAB
         const seasonBtn = document.createElement('button');
         seasonBtn.className = 'tab-item tab-seasons';
         seasonBtn.dataset.title = '__seasons__';
@@ -702,21 +697,30 @@ const SizeDash = (() => {
         bar.appendChild(seasonBtn);
     }
 
-    // --------------------------------------------------------
-    // PER-LIBRARY QUICK REFRESH — RE-WALKS ONE LIBRARY ONLY
-    // --------------------------------------------------------
+    function _libraryScopeLabel(title, type) {
+        const t = String(title || '').toLowerCase();
+        if (type === 'movie' || t.includes('movie')) return 'Movies';
+        if (t.includes('anime')) return 'Animes';
+        return 'Shows';
+    }
 
+    //======================================================
+    // PER-LIBRARY QUICK REFRESH — RE-WALKS ONE LIBRARY ONLY
+    //======================================================
     async function _quickRefreshLibrary(title, type, btnEl) {
         if (btnEl.disabled) return;
         btnEl.disabled = true;
         btnEl.classList.add('spinning');
+        const label = _libraryScopeLabel(title, type);
         try {
+            showToast(`Resyncing ${label} from Plex and recalculating sizes…`, 'info');
             const result = await api(`/api/sync/library/${encodeURIComponent(title)}`, { method: 'POST' });
             if (result.status === 'error') throw new Error(result.message || 'Failed to start refresh');
             _pollQuickRefresh(title, type, btnEl, result.key || `refresh:${title}`);
         } catch (e) {
             btnEl.disabled = false;
             btnEl.classList.remove('spinning');
+            showToast(`${label} size resync failed: ${e.message || e}`, 'error');
             console.error('Quick refresh failed:', e);
         }
     }
@@ -735,6 +739,7 @@ const SizeDash = (() => {
                         await _fetchLibrary(title);
                         _applyView();
                     }
+                    showToast(`${_libraryScopeLabel(title, type)} sizes updated`, 'success');
                 }
             } catch { /* IGNORE TRANSIENT ERRORS — KEEP POLLING */ }
         }, 3000);
@@ -762,10 +767,9 @@ const SizeDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //===================
     // COLUMN PREFERENCES
-    // --------------------------------------------------------
-
+    //===================
     function _getViewKey() {
         if (state.viewMode === 'seasons') return '__seasons__';
         return `${state.activeLibraryType}_${state.activeLibrary}`;
@@ -808,10 +812,9 @@ const SizeDash = (() => {
         onChange: () => _renderTable(),
     });
 
-    // --------------------------------------------------------
+    //==============
     // DATA FETCHING
-    // --------------------------------------------------------
-
+    //==============
     async function _fetchLibrary(title) {
         if (dataCache[title] && dataCache[title].enriched) {
             state.allItems = dataCache[title].items;
@@ -839,10 +842,9 @@ const SizeDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //===================
     // ENRICHMENT POLLING
-    // --------------------------------------------------------
-
+    //===================
     function _startEnrichmentPolling(title) {
         _stopEnrichmentPolling();
         _showEnrichmentBanner(true);
@@ -920,11 +922,10 @@ const SizeDash = (() => {
             : 'Loading episode sizes and durations in the background\u2026';
     }
 
-    // --------------------------------------------------------
+    //=====================================================
     // SEASON AUTO-LOAD — PREFETCH, ANALYSIS PANEL, POLLING
-    // --------------------------------------------------------
-
-    // SILENTLY FETCH ALL SHOW LIBRARIES AFTER INIT — PRE-WARMS SEASONS TAB AND STARTS ENRICHMENT
+    //=====================================================
+    // Silently fetch all show libraries after init — pre-warms seasons tab and starts enrichment
     async function _prefetchShowLibraries() {
         const showLibs = state.libraries.filter(l => l.type !== 'movie');
         for (const lib of showLibs) {
@@ -942,7 +943,7 @@ const SizeDash = (() => {
         }
     }
 
-    // SHOW / HIDE THE ANALYSIS PANEL (REPLACES TABLE AREA WHILE LOADING)
+    // Show / hide the analysis panel (replaces table area while loading)
     function _showSeasonAnalysis() {
         _hideError(); _hideEmpty(); _hideTable();
         const el = document.getElementById('sizeSeasonAnalysis');
@@ -954,11 +955,11 @@ const SizeDash = (() => {
         if (el) el.style.display = 'none';
     }
 
-    // BUILD THE PER-LIBRARY PROGRESS ROW HTML
+    // Build the per-library progress row HTML
     function _seasonLibRowHTML(title, loaded, enriched, progress) {
         const cls = enriched ? 'sal-done' : loaded ? 'sal-active' : 'sal-waiting';
         const icon = enriched
-            ? `<svg class="sal-check-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+            ? svgCheck(18, 2.5, 'sal-check-icon')
             : `<div class="sal-spinner"></div>`;
 
         let text, pct;
@@ -987,7 +988,7 @@ const SizeDash = (() => {
         </div>`;
     }
 
-    // RENDER ALL LIBRARY ROWS FROM SCRATCH
+    // Render all library rows from scratch
     function _renderSeasonAnalysisLibs() {
         const showLibs = state.libraries.filter(l => l.type !== 'movie');
         const container = document.getElementById('seasonAnalysisLibs');
@@ -998,7 +999,7 @@ const SizeDash = (() => {
         _updateSeasonAnalysisFooter();
     }
 
-    // UPDATE A SINGLE LIBRARY ROW IN PLACE
+    // Update a single library row in place
     function _updateSeasonAnalysisLib(title, loaded, enriched, progress) {
         const container = document.getElementById('seasonAnalysisLibs');
         if (!container) return;
@@ -1022,7 +1023,7 @@ const SizeDash = (() => {
             : `${doneCount} of ${showLibs.length} librar${showLibs.length === 1 ? 'y' : 'ies'} analyzed`;
     }
 
-    // ENTRY POINT WHEN SEASONS IS CLICKED WITH NO CACHED SEASON DATA
+    // Entry point when seasons is clicked with no cached season data
     async function _loadAllShowLibrariesForSeasons() {
         const showLibs = state.libraries.filter(l => l.type !== 'movie');
         if (!showLibs.length) { _applyView(); return; }
@@ -1030,7 +1031,7 @@ const SizeDash = (() => {
         _showSeasonAnalysis();
         _renderSeasonAnalysisLibs();
 
-        // KICK OFF ANY LIBRARIES THAT HAVEN'T BEEN FETCHED YET (IN PARALLEL)
+        // Kick off any libraries that haven't been fetched yet (in parallel)
         const toFetch = showLibs.filter(l => !dataCache[l.title]);
         await Promise.all(toFetch.map(async (lib) => {
             try {
@@ -1048,13 +1049,13 @@ const SizeDash = (() => {
             } catch { /* polling will surface any issues */ }
         }));
 
-        // ONLY START POLLER IF A SYNC/STARTUP WORKER IS ACTUALLY RUNNING
+        // Only start poller if a sync/startup worker is actually running
         if (showLibs.some(l => !dataCache[l.title]?.enriched && dataCache[l.title]?.enrichmentRunning)) {
             _startSeasonAnalysisPolling(showLibs);
         }
     }
 
-    // POLL ALL SHOW LIBRARIES FOR ENRICHMENT COMPLETION, UPDATING PANEL IN REAL-TIME
+    // Poll all show libraries for enrichment completion, updating panel in real-time
     function _startSeasonAnalysisPolling(showLibs) {
         _stopSeasonAnalysisPolling();
 
@@ -1093,17 +1094,17 @@ const SizeDash = (() => {
             const seasonCount = _buildSeasonItems().length;
 
             if (seasonCount > 0 && analysisVisible) {
-                // WE HAVE DATA — TRANSITION FROM ANALYSIS PANEL TO THE LIVE TABLE
+                // We have data — transition from analysis panel to the live table
                 _hideSeasonAnalysis();
                 _applyView();
             } else if (analysisVisible) {
                 _updateSeasonAnalysisFooter();
             } else if (pending.length > 0) {
-                // TABLE ALREADY VISIBLE — REFRESH WITH NEWLY ENRICHED DATA
+                // Table already visible — refresh with newly enriched data
                 _applyView();
             }
 
-            // ALL LIBRARIES ENRICHED — CLEAN UP
+            // All libraries enriched — clean up
             if (showLibs.every(l => dataCache[l.title]?.enriched)) {
                 _stopSeasonAnalysisPolling();
                 if (state.viewMode === 'seasons') {
@@ -1121,10 +1122,9 @@ const SizeDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //=====
     // VIEW
-    // --------------------------------------------------------
-
+    //=====
     function _applyView() {
         _showLoading(false);
         _hideError();
@@ -1142,13 +1142,18 @@ const SizeDash = (() => {
                 return;
             }
 
+            const searching = !!state.search;
+            const sorting = !!state.sortBy;
             const seasonStats = _computeSeasonStats(allSeasons);
             let data = allSeasons
-                .filter(s => _isSeasonBloated(s, seasonStats))
-                .map(s => ({ ...s, _bloat: _seasonBloatData(s, seasonStats) }));
+                .map(s => {
+                    const bloated = _isSeasonBloated(s, seasonStats);
+                    return bloated ? { ...s, _bloat: _seasonBloatData(s, seasonStats) } : { ...s, _bloat: null };
+                })
+                .filter(s => searching || sorting || s._bloat);
             data = data.map((s, i) => ({ ...s, rank: i + 1 }));
 
-            if (data.length === 0 && !state.search) {
+            if (data.length === 0 && !searching && !sorting) {
                 _hideTable();
                 const pending = Object.values(dataCache).some(c => c.type === 'show' && !c.enriched);
                 if (pending) {
@@ -1160,7 +1165,7 @@ const SizeDash = (() => {
                 return;
             }
 
-            if (state.search) {
+            if (searching) {
                 const q = state.search.toLowerCase();
                 data = data.filter(item =>
                     (item.showTitle && item.showTitle.toLowerCase().includes(q)) ||
@@ -1218,20 +1223,36 @@ const SizeDash = (() => {
         const totalItems = data.length;
         state._totalUnfiltered = totalItems;
 
-        // BLOAT FILTERING — compute stats from all items, then keep only oversized ones
+        const searching = !!state.search;
+        const activeFilters = Object.entries(state.columnFilters).filter(([, v]) => v instanceof Set ? v.size > 0 : !!v);
+        const qf = state.quickFilters;
+        const quickFiltering = !!(qf.criticRating || qf.audienceRating || qf.year || qf.subtitles);
+        const drillFiltering = activeFilters.length > 0 || quickFiltering;
+        const sorting = !!state.sortBy;
+        const fullLibraryMode = searching || drillFiltering || sorting;
+
+        // BLOAT FILTERING — default view shows oversized items. Any explicit
+        // search/filter/sort works from the full current library so normal-sized
+        // matches are not hidden by the oversized-only default view.
         if (state.activeLibraryType === 'show') {
             const showStats = _computeShowStats(data);
             data = data
-                .filter(item => _isShowBloated(item, showStats))
-                .map(item => ({ ...item, _bloat: _showBloatData(item, showStats) }));
+                .map(item => {
+                    const bloated = _isShowBloated(item, showStats);
+                    return bloated ? { ...item, _bloat: _showBloatData(item, showStats) } : { ...item, _bloat: null };
+                })
+                .filter(item => fullLibraryMode || item._bloat);
         } else {
             data = data
-                .filter(item => _isMovieBloated(item))
-                .map(item => ({ ...item, _bloat: _movieBloatData(item) }));
+                .map(item => {
+                    const bloated = _isMovieBloated(item);
+                    return bloated ? { ...item, _bloat: _movieBloatData(item) } : { ...item, _bloat: null };
+                })
+                .filter(item => fullLibraryMode || item._bloat);
         }
 
-        // NOTHING BLOATED
-        if (data.length === 0 && !state.search) {
+        //Nothing Bloated
+        if (data.length === 0 && !fullLibraryMode) {
             _hideTable();
             const cached = dataCache[state.activeLibrary];
             const enriched = cached ? cached.enriched : false;
@@ -1245,22 +1266,22 @@ const SizeDash = (() => {
             return;
         }
 
-        // SEARCH FILTER
+        //Search Filter
         if (state.search) {
             const q = state.search.toLowerCase();
             data = data.filter(item => item.title && item.title.toLowerCase().includes(q));
         }
 
-        // COLUMN-HEADER FILTERS
-        const activeFilters = Object.entries(state.columnFilters).filter(([, v]) => v instanceof Set ? v.size > 0 : !!v);
+        //Column-header Filters
         if (activeFilters.length > 0) {
             data = data.filter(item => activeFilters.every(([colKey, fv]) => {
                 const raw = item[colKey];
                 if (raw == null) return false;
                 if (typeof fv === 'function') return fv(raw);
                 if (fv instanceof Set) {
-                    if (Array.isArray(raw)) return raw.some(x => fv.has(String(x)));
-                    return fv.has(String(raw));
+                    const selected = new Set([...fv].map(x => String(x).toLowerCase()));
+                    if (Array.isArray(raw)) return raw.some(x => selected.has(String(x).toLowerCase()));
+                    return selected.has(String(raw).toLowerCase());
                 }
                 const fl = fv.toLowerCase();
                 if (Array.isArray(raw)) return raw.some(x => String(x).toLowerCase().includes(fl));
@@ -1268,8 +1289,7 @@ const SizeDash = (() => {
             }));
         }
 
-        // QUICK FILTERS — NUMERIC THRESHOLD AND EXACT MATCH
-        const qf = state.quickFilters;
+        // Quick filters — numeric threshold and exact match
         if (qf.criticRating) {
             const threshold = parseFloat(qf.criticRating);
             data = data.filter(item => item.rating != null && item.rating > threshold);
@@ -1288,7 +1308,7 @@ const SizeDash = (() => {
             data = data.filter(item => !item.subtitleLanguages || item.subtitleLanguages === 'None');
         }
 
-        // SORT
+        // Sort
         if (state.sortBy && data.length > 0) {
             const cols = state.activeLibraryType === 'movie' ? MOVIE_COLS : SHOW_COLS;
             const colDef = cols.find(c => c.key === state.sortBy);
@@ -1300,7 +1320,7 @@ const SizeDash = (() => {
             });
         }
 
-        // RE-ASSIGN RANK AFTER FILTER/SORT
+        //Re-assign RANK After Filter/sort
         for (let i = 0; i < data.length; i++) {
             data[i] = Object.assign({}, data[i], { rank: i + 1 });
         }
@@ -1329,57 +1349,38 @@ const SizeDash = (() => {
         }
     }
 
-    // --------------------------------------------------------
+    //================
     // TABLE RENDERING
-    // --------------------------------------------------------
-
+    //================
     function _renderTable() {
         const thead = document.getElementById('sizeTableHead');
         const tbody = document.getElementById('sizeTableBody');
-        const mobile = _isMobile();
+        const mobile = isMobile();
         const cols = mobile
-            ? _getMasterCols().filter(c => colMgr.state.mobileColumns.includes(c.key))
+            ? (() => {
+                const master = _getMasterCols();
+                const rank = master.find(c => c.key === 'rank');
+                const rest = master.filter(c => c.key !== 'rank' && colMgr.state.mobileColumns.includes(c.key));
+                return rank ? [rank, ...rest] : rest;
+            })()
             : colMgr.getOrderedVisibleCols();
 
-        // HEADER
-        const table = document.getElementById('sizeTable');
-        const hasAnyWidth = Object.keys(colMgr.state.columnWidths).length > 0;
-        table.classList.toggle('resizable', hasAnyWidth);
-
-        let headerHTML = '<tr><th class="expand-col"></th>';
-        for (const col of cols) {
-            const isSorted = state.sortBy === col.key;
-            const sortClass = isSorted ? `sorted-${state.sortDir}` : '';
-            const sortableClass = col.sortable ? 'sortable' : '';
-            const _fv = state.columnFilters[col.key];
-            const hasFilter = _fv instanceof Set ? _fv.size > 0 : !!_fv;
-            const filterActiveClass = hasFilter ? 'active' : '';
-            const colLabel = colMgr.getColLabel(col, mobile);
-            const widthStyle = colMgr.state.columnWidths[col.key]
-                ? `width:${colMgr.state.columnWidths[col.key]}px;`
-                : hasAnyWidth ? `min-width:${colLabel.length + 3}ch;` : '';
-            const rankClass = col.key === 'rank' ? 'row-num-col' : '';
-            headerHTML += `<th class="${sortableClass} ${sortClass} ${rankClass}" data-col="${col.key}" draggable="true" style="${widthStyle}">`;
-            headerHTML += '<div class="th-content">';
-            if (col.key !== 'rank') headerHTML += `<button class="col-filter-btn ${filterActiveClass}" data-col="${col.key}" title="Filter ${colLabel}">${hasFilter ? '<span class="filter-dot"></span>' : ''}<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.5h13l-5 6v5l-3 2v-7z"/></svg></button>`;
-            headerHTML += `<span class="th-label">${escapeHTML(colLabel)}</span>`;
-            if (col.sortable) headerHTML += '<span class="sort-indicator"></span>';
-            headerHTML += '</div>';
-            headerHTML += `<div class="resize-handle" data-col="${col.key}"></div>`;
-            headerHTML += '</th>';
-        }
-        headerHTML += '</tr>';
-        thead.innerHTML = headerHTML;
-
-        // ATTACH RESIZE HANDLES BEFORE SORT LISTENERS
-        colMgr.initResizeHandles(thead, 'sizeTable', (resizing) => { isResizing = resizing; });
-        colMgr.initColumnDrag(thead);
-
-        // SORT CLICK HANDLERS
-        thead.querySelectorAll('th.sortable').forEach(th => {
-            th.addEventListener('click', (e) => {
-                if (isResizing || e.target.closest('.col-filter-btn') || e.target.closest('.resize-handle')) return;
-                const col = th.dataset.col;
+        //Header
+        colMgr.renderTableHeader({
+            thead,
+            tableElementId: 'sizeTable',
+            cols,
+            mobile,
+            sortKey: state.sortBy,
+            sortDir: state.sortDir,
+            leadingHTML: '<th class="expand-col"></th>',
+            thContentPrefix: (col, label) => {
+                if (col.key === 'rank') return '';
+                const _fv = state.columnFilters[col.key];
+                const hasFilter = _fv instanceof Set ? _fv.size > 0 : !!_fv;
+                return `<button class="col-filter-btn ${hasFilter ? 'active' : ''}" data-col="${col.key}" title="Filter ${label}">${hasFilter ? '<span class="filter-dot"></span>' : ''}<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M1.5 1.5h13l-5 6v5l-3 2v-7z"/></svg></button>`;
+            },
+            onSort: (col) => {
                 if (state.sortBy === col) {
                     state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
                     if (state.sortDir === 'asc' && state.sortBy === col) { state.sortBy = null; }
@@ -1390,7 +1391,9 @@ const SizeDash = (() => {
                 state.page = 1;
                 state.expandedRow = null;
                 _applyView();
-            });
+            },
+            onResizingChange: (resizing) => { isResizing = resizing; },
+            isResizingFn: () => isResizing,
         });
 
         thead.querySelectorAll('.col-filter-btn').forEach(btn => {
@@ -1400,7 +1403,7 @@ const SizeDash = (() => {
             });
         });
 
-        // BODY
+        // Body
         let bodyHTML = '';
         for (let i = 0; i < state.items.length; i++) {
             const item = state.items[i];
@@ -1424,7 +1427,7 @@ const SizeDash = (() => {
         tbody.querySelectorAll('.data-row').forEach(row => {
             row.addEventListener('click', () => {
                 const idx = parseInt(row.dataset.index);
-                if (_isMobile()) {
+                if (isMobile()) {
                     _openMobilePanel(state.items[idx]);
                 } else {
                     state.expandedRow = state.expandedRow === idx ? null : idx;
@@ -1433,8 +1436,6 @@ const SizeDash = (() => {
             });
         });
     }
-
-    // --------------------------------------------------------
 
     function _formatCell(key, value, item) {
         if (value === null || value === undefined) return '<span class="text-muted">-</span>';
@@ -1481,9 +1482,19 @@ const SizeDash = (() => {
             case 'library':
                 return `<span class="text-muted" style="font-size:0.75rem">${escapeHTML(String(value))}</span>`;
 
+            case 'addedAt':
+                return `<span class="text-muted" style="font-size:0.75rem">${escapeHTML(_formatAddedDate(value))}</span>`;
+
             default:
                 return escapeHTML(String(value));
         }
+    }
+
+    function _formatAddedDate(value) {
+        if (!value) return '-';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value);
+        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     }
 
     function _renderResolution(val) {
@@ -1519,10 +1530,9 @@ const SizeDash = (() => {
         return escapeHTML(val);
     }
 
-    // --------------------------------------------------------
+    //====================
     // MOBILE DETAIL PANEL
-    // --------------------------------------------------------
-
+    //====================
     function _openMobilePanel(item) {
         const panel = document.getElementById('mobileDetailPanel');
         if (!panel || !item) return;
@@ -1544,7 +1554,7 @@ const SizeDash = (() => {
         document.getElementById('mobilePanelBackdrop').onclick = _closeMobilePanel;
         document.getElementById('mobilePanelClose').onclick = _closeMobilePanel;
 
-        // SWIPE-TO-CLOSE: SAME BOTTOM-SHEET FEEL AS SEARCH
+        // Swipe-to-close: same bottom-sheet feel as search
         const sheet = document.getElementById('mobilePanelSheet');
         const body  = document.getElementById('mobilePanelBody');
         let startY = 0, dragActive = false, isClosing = false;
@@ -1721,10 +1731,9 @@ const SizeDash = (() => {
         </div>`;
     }
 
-    // --------------------------------------------------------
+    //===========
     // DETAIL ROW
-    // --------------------------------------------------------
-
+    //===========
     function _renderDetail(item) {
         if (item._isSeason) {
             let html = '<div class="detail-content"><div class="detail-section"><h4>Season Details</h4><div class="detail-grid">';
@@ -1805,10 +1814,9 @@ const SizeDash = (() => {
         return html;
     }
 
-    // --------------------------------------------------------
+    //===================
     // EPISODE DRILL-DOWN
-    // --------------------------------------------------------
-
+    //===================
     async function _fetchEpisodes(libraryTitle, showTitle, seasonName) {
         const url = `/size/library/${encodeURIComponent(libraryTitle)}/episodes`
             + `?show=${encodeURIComponent(showTitle)}&season=${encodeURIComponent(seasonName)}`;
@@ -1881,19 +1889,20 @@ const SizeDash = (() => {
         return `<div class="detail-item"><span class="label">${escapeHTML(label)}</span><span class="value">${display}</span></div>`;
     }
 
-    // --------------------------------------------------------
+    //===========
     // PAGINATION
-    // --------------------------------------------------------
-
+    //===========
     function _renderPagination() {
         const bar = document.getElementById('sizePaginationBar');
-        if (state.totalItems === 0) { bar.style.display = 'none'; return; }
-
-        bar.style.display = 'flex';
-        const typeLabel = state.viewMode === 'seasons' ? 'oversized seasons'
-            : (state.activeLibraryType === 'movie' ? 'oversized movies' : 'oversized shows');
-        const start = (state.page - 1) * state.perPage + 1;
-        const end = Math.min(state.page * state.perPage, state.totalItems);
+        const hasColumnFilters = Object.entries(state.columnFilters).some(([, v]) => v instanceof Set ? v.size > 0 : !!v);
+        const qf = state.quickFilters || {};
+        const hasQuickFilters = !!(qf.criticRating || qf.audienceRating || qf.year || qf.subtitles);
+        const fullLibraryMode = !!state.search || hasColumnFilters || hasQuickFilters || !!state.sortBy;
+        const typeLabel = state.viewMode === 'seasons'
+            ? (fullLibraryMode ? 'seasons' : 'oversized seasons')
+            : state.activeLibraryType === 'movie'
+            ? (fullLibraryMode ? 'movies' : 'oversized movies')
+            : (fullLibraryMode ? 'shows' : 'oversized shows');
         let isPartial;
         if (state.viewMode === 'seasons') {
             isPartial = Object.values(dataCache).some(c => c.type === 'show' && !c.enriched);
@@ -1919,27 +1928,20 @@ const SizeDash = (() => {
             ? ` of ${totalUnfiltered.toLocaleString()} total` : '';
         const totalDisplay = `${state.totalItems.toLocaleString()}${isPartial ? '+' : ''} ${typeLabel}${ofTotal}${syncInfo}`;
 
-        bar.innerHTML = `
-            <div class="pagination-info">${start.toLocaleString()}-${end.toLocaleString()} of ${totalDisplay}</div>
-            <div class="pagination-controls">
-                <button class="btn btn-sm" id="sizePrevPage" ${state.page <= 1 ? 'disabled' : ''}>\u2190 Previous</button>
-                <span class="page-indicator">Page ${state.page} of ${state.totalPages || 1}</span>
-                <button class="btn btn-sm" id="sizeNextPage" ${state.page >= state.totalPages ? 'disabled' : ''}>Next \u2192</button>
-            </div>
-        `;
-
-        document.getElementById('sizePrevPage').addEventListener('click', () => {
-            if (state.page > 1) { state.page--; state.expandedRow = null; _applyView(); }
-        });
-        document.getElementById('sizeNextPage').addEventListener('click', () => {
-            if (state.page < state.totalPages) { state.page++; state.expandedRow = null; _applyView(); }
+        renderPaginationBar({
+            bar,
+            page: state.page,
+            totalPages: state.totalPages,
+            totalItems: state.totalItems,
+            perPage: state.perPage,
+            totalHTML: totalDisplay,
+            onPage: (p) => { state.page = p; state.expandedRow = null; _applyView(); },
         });
     }
 
-    // --------------------------------------------------------
-    // UI STATE HELPERS
-    // --------------------------------------------------------
-
+    //====================
+    // UI STATE MANAGEMENT
+    //====================
     function _showLoading(show, message) {
         const el = document.getElementById('sizeLoading');
         el.style.display = show ? 'flex' : 'none';
@@ -1980,10 +1982,9 @@ const SizeDash = (() => {
     function _showTable() { document.getElementById('sizeTableWrapper').style.display = 'block'; }
     function _hideTable() { document.getElementById('sizeTableWrapper').style.display = 'none'; }
 
-    // --------------------------------------------------------
+    //===========
     // PUBLIC API
-    // --------------------------------------------------------
-
+    //===========
     function invalidateCache() {
         for (const key of Object.keys(dataCache)) delete dataCache[key];
         _stopEnrichmentPolling();
@@ -1997,10 +1998,10 @@ const SizeDash = (() => {
         }
     }
 
-    // NAVIGATE TO SIZE PAGE AND PRE-APPLY A FILTER
+    // Navigate to size page and pre-apply a filter
     // FILTERSPEC: { filterType: 'picklist'|'text'|'quick'|'function', filterKey: string, filterValue: * }
     function navigateWithFilter(libraryTitle, filterSpec) {
-        // IF SIZE IS ALREADY SHOWING THE CORRECT LIBRARY, APPLY FILTER IMMEDIATELY
+        // If size is already showing the correct library, apply filter immediately
         if (state.activeLibrary === libraryTitle) {
             state.columnFilters = {};
             _resetQuickFilters();
@@ -2013,14 +2014,14 @@ const SizeDash = (() => {
         }
         // STORE PENDING FILTER — _switchLibrary WILL CONSUME IT AFTER ITS STATE RESET
         _pendingFilter = { libraryTitle, ...filterSpec };
-        // IF SIZE HAS LOADED ITS LIBRARY LIST, SWITCH TO THE TARGET LIBRARY
+        // If size has loaded its library list, switch to the target library
         const lib = state.libraries.find(l => l.title === libraryTitle);
         if (lib) {
             window.location.hash = '#size';
             _switchLibrary(lib.title, lib.type);
             return;
         }
-        // SIZE NOT YET INITIALIZED — NAVIGATE AND LET init() CONSUME THE PENDING FILTER
+        // Size not yet initialized — navigate and let init() consume the pending filter
         window.location.hash = '#size';
     }
 
