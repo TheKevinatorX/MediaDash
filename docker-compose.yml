@@ -1,18 +1,21 @@
 #========== MEDIADASH STACK ==========#
 
 services:
-  ### DASHBOARD
-  mediadash:
-    image: ghcr.io/thekevinatorx/mediadash:latest
-    container_name: MediaDash
+  ### MEDIA DASHBOARD (DEV)
+  MediaDash-Dev:
+    image: mediadash:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: MediaDash-Dev
     restart: unless-stopped
     network_mode: bridge
     ports:
-      - "5010:5010"
+      - 5011:5010
     environment:
       TZ: America/New_York
     volumes:
-      - ./cache:/data/cache
+      - ./cache-dev:/data/cache
       - /media/Movies:/media/Movies:ro
       - /media/FullSeries:/media/FullSeries:ro
       - /media/NAS:/media/NAS:ro

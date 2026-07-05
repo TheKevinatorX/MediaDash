@@ -4,6 +4,7 @@
 .claude/
 /Docs
 /cache
+/cache-dev
 CLAUDE.md
 
 # ENVIRONMENT & SECRETS
